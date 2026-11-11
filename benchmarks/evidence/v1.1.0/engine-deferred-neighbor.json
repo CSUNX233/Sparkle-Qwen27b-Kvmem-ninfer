@@ -1,0 +1,45 @@
+{
+  "change": "complete-query-gated predecessor page fill",
+  "base_commit": "c287b7d",
+  "patch": "benchmarks/qualification/deferred-neighbor-c287b7d.patch",
+  "installed_binary_sha256": "516e31d05e27f03ca8beac12d4af6663a32073d700a2c2eeee6b1e5760b381e9",
+  "final_v110_engine_sha256": "8b2c195e32e3b58a3584b284679c990a07986691967f1b939b0fe31351559012",
+  "baseline_engine_sha256": "71259a21f7b525ca7477193a292e4d3623cc58b9efd785005ee934cc29673507",
+  "mechanisms": [
+    "Fill the predecessor page of a high-scoring cold page by replacing a lower-ranked member of the recent overlap range; at most 8 pages per selection and at most one eighth of the selected set; total selected pages and all original cold pages are unchanged.",
+    "Allow the fill only after the known query end has been reached and the full captured query has been scored; unknown or incomplete queries keep the original selection."
+  ],
+  "switch": {
+    "enable": "NINFER_KVMEM_OVERLAP_PREDECESSOR=1",
+    "disable": "NINFER_KVMEM_OVERLAP_PREDECESSOR=0"
+  },
+  "diagnostics": {
+    "env": "NINFER_KVMEM_RANK_AUDIT_DIR",
+    "default": "off",
+    "writes": "per-generation score TSV and selection JSON; may contain page numbers and prompt-derived metadata"
+  },
+  "results": [
+    {
+      "fixture": "110K long task",
+      "before": "output budget 4096 exhausted, no final answer",
+      "after": "12/12, finish=stop, 733 output tokens, 275.9 s",
+      "peak_mib": 11232
+    },
+    {
+      "fixture": "218K long task",
+      "before": "25/26 on the intermediate candidate",
+      "after": "26/26, finish=stop, normalized JSON matches the correct baseline",
+      "peak_mib": 11240
+    }
+  ],
+  "memory": {
+    "baseline_110k_mib": 11230,
+    "baseline_218k_mib": 11242,
+    "delta_110k_mib": 2,
+    "note": "0.5 s sampling; not a strict instantaneous upper bound."
+  },
+  "boundaries": [
+    "Only these two long fixtures were rerun for this fix.",
+    "The engine still reports the 1.0.0 base version string; identify it by SHA-256."
+  ]
+}

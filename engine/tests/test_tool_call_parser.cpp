@@ -1697,10 +1697,58 @@ int test_constrained_tool_envelope() {
     return failures;
 }
 
+int test_orphaned_function_envelope() {
+    const auto contract = output_contract_for("job_output", Json{{"job_id", Json{{"type", "string"}}},
+        {"wait", Json{{"type", "boolean"}}}, {"timeout_ms", Json{{"type", "integer"}}}});
+    const std::string broken = "<tool_call>\n=job_output>\n<parameter=job_id=pwsh-2\n"
+        "</parameter>\n<parameter=wait=true\n</parameter>\n<parameter=timeout_ms=300000\n"
+        "</parameter>\n</function>\n</tool_call>";
+    int failures = check_reported(broken, *contract,
+        ninfer::ToolCallParseFallbackReason::MalformedStructure, "job_output",
+        "orphaned function envelope ended as ordinary text");
+    const auto whole = fi::parse_qwen_tool_call_output(broken, 64, *contract);
+    for (std::size_t split = 0; split <= broken.size(); ++split) {
+        fi::ToolCallOutputDecoder decoder(contract, 64);
+        std::string visible = decoder.feed(std::string_view(broken).substr(0, split));
+        visible += decoder.feed(std::string_view(broken).substr(split));
+        const auto terminal = decoder.finish();
+        failures += check(visible.empty() && terminal.content.empty() &&
+            terminal.tool_calls.size() == 1 &&
+            terminal.tool_calls.front().name == "malformed_tool_call" &&
+            terminal.tool_calls.front().arguments_json == whole.tool_calls.front().arguments_json &&
+            terminal.diagnostics == whole.diagnostics, "orphan recovery depends on stream split");
+    }
+    if (!whole.tool_calls.empty()) {
+        const auto args = Json::parse(whole.tool_calls.front().arguments_json);
+        failures += check(args.size() == 2 && !args.contains("job_id") &&
+            args.at("error").get<std::string>().find("<function=NAME>") != std::string::npos,
+            "orphan recovery invented executable arguments or omitted format feedback");
+    }
+    for (const auto& text : {"Example: " + broken, "```xml\n" + broken + "\n```", "`" + broken + "`",
+                            broken.substr(0, broken.size() - 12), broken + " trailing explanation",
+                            std::string("<tool_call> is a tag, not a call")}) {
+        const auto parsed = fi::parse_qwen_tool_call_output(text, 64, *contract);
+        failures += check(!parsed.is_tool_call_response && parsed.tool_calls.empty() &&
+            parsed.content == text, "orphan error detection consumed prose, code or a cut envelope");
+    }
+    const auto good = fi::parse_qwen_tool_call_output(tool_call("job_output",
+        {{"job_id", "pwsh-2"}, {"wait", "true"}, {"timeout_ms", "300000"}}), 64, *contract);
+    failures += check(good.tool_calls.size() == 1 && good.tool_calls.front().name == "job_output" &&
+        Json::parse(good.tool_calls.front().arguments_json) ==
+            Json{{"job_id", "pwsh-2"}, {"wait", true}, {"timeout_ms", 300000}},
+        "valid job_output call changed");
+    const std::string broken_write = "<tool_call>\n=write>\n<parameter=path=x\n</parameter>\n"
+        "</function>\n</tool_call>";
+    failures += check_reported(broken_write, *contract,
+        ninfer::ToolCallParseFallbackReason::MalformedStructure, "write",
+        "orphaned write must report an error, never execute");
+    return failures;
+}
+
 #ifdef NINFER_TOOL_RECOVERY_ONLY
 int main() {
     const int failures = test_unterminated_quoted_names() + test_markdown_quoted_calls() +
-                         test_open_reasoning_recovery();
+                         test_open_reasoning_recovery() + test_orphaned_function_envelope();
     if (failures == 0) { std::cout << "ok\n"; }
     return failures == 0 ? 0 : 1;
 }
@@ -1746,6 +1794,7 @@ int main() {
     failures += test_mismatched_closing_tags_reported();
     failures += test_harness_forms_recovery_and_streaming();
     failures += test_claude_code_plan_and_task_create_exact_repro();
+    failures += test_orphaned_function_envelope();
     if (failures == 0) { std::cout << "ok\n"; }
     return failures == 0 ? 0 : 1;
 }

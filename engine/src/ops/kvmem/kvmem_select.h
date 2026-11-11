@@ -112,6 +112,10 @@ public:
     [[nodiscard]] std::vector<std::uint32_t> select(std::uint32_t begin, std::uint32_t end,
                                                    std::uint32_t budget) const;
 
+    // The caller supplies readiness from the current query, avoiding stale snapshot flags.
+    [[nodiscard]] std::vector<std::uint32_t> select_ready(std::uint32_t begin,
+        std::uint32_t end, std::uint32_t budget, bool ready_for_supplement) const;
+
 private:
     std::vector<std::pair<float, std::uint32_t>> ranked_;
     // The old ring comparator does not define a total order for NaN. Preserve its range-local

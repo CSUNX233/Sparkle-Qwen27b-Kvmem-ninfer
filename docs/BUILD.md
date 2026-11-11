@@ -1,5 +1,14 @@
 # 从源码编译
 
+## v1.1.0 源码状态
+
+v1.1.0 源码标签以固定 `c287b7d` 为基线，叠加两个补丁：
+
+- `benchmarks/qualification/deferred-neighbor-c287b7d.patch`：完整查询评分后补齐前邻页，含默认关闭的 rank audit。
+- `benchmarks/qualification/tool-envelope-c287b7d.patch`：畸形 `<tool_call>` 外壳只报错、不执行。
+
+发布二进制为 c287b7d + 两个补丁的增量构建：重编 71 个 Host 单元和 11 个已验证 CUDA 对象，复用其余原静态库，**不是干净全量构建**。解析器测试与新增回归通过；长上下文只复测 110K / 218K。构建前可用 `git apply --check` 核对补丁，再用下方正常 CMake 流程配置自己的干净构建。
+
 预编译引擎供 Windows x64 / sm120a 使用。本机开发工具链是 CUDA **13.0.48**、MSVC v143 **14.44.35207**，兼容路径 `NINFER_SM8X_COMPAT`，`NINFER_SM120_NATIVE=OFF`、PDL=OFF、D3D12 residency=ON。显卡调度只对 cc1200、46 SM 指定形状启用。
 
 原分享包中的 Git worktree 与编译缓存指向作者电脑，因此没有把其静态库、MSVC、完整 CUDA SDK 或损坏 `.git` 上传。请在自己的环境配置干净构建；不要使用上游文档的 RTX 3090/sm86 测速来推断本版性能。

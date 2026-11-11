@@ -30,10 +30,9 @@
 新部署按固定版本与 SHA-256 获取依赖，使用 npm ci，不擅自升级到 latest。
 保留 xhigh、采样、量化、检索预算、MTP 和缓存策略，先建立可复现基线。
 新部署先从完整保守组合 DeviceKV=36864 / RetrieveTokens=3840 起步，
-配套 sink=12288、recent=19456、HostKV=7168MiB、NVFP4、MTP3、chunk128。
-当前 NVFP4 比此前 RK4V4 配置多占一些显存；很紧张时，使用者可在
-config/local.json 设置 KVDType=rk4v4 并重启，同一新版引擎支持两者。
-旧配置缺少 KVDType 也默认 NVFP4；切换前说明缓存重建和输出可能变化。
+配套 sink=12288、recent=19456、HostKV=7168MiB、RK4V4 + GDN FP32、MTP3、chunk128。
+v1.1.0 默认 RK4V4；同池比 NVFP4 少约 20 MiB，NVFP4 不是省显存选项。
+旧配置缺少 KVDType 也默认 RK4V4；切换前说明缓存重建和输出可能变化。
 不要直接复制维护者进阶档39168/6144，更不要只缩页池而保持装不下的窗口。
 先清理实际独显占用，通过启动、短任务、缓存和工具续接，记录CUDA余量；
 之后逐档加大，并验证相应长度的召回与峰值，失败恢复上一档。

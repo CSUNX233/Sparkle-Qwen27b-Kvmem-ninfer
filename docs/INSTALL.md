@@ -2,7 +2,7 @@
 
 v0.1.5离线双版本包请先读[整合包安装](OFFLINE_BUNDLE.md)和[纠错文档](TROUBLESHOOTING.md)。新部署默认 `AnswerPenaltyScope=answer`（旧配置缺少也采用answer），设为 `carry-over` 后正常重启可关闭；引擎自身缺省仍为carry-over。
 
-显存处理顺序：优先开启混合显卡模式 → 对实际引擎关闭CUDA系统内存回退（保留7GiB KVMem Host KV）→ 关闭无关后台应用 → 仍不足优先切RK4V4 → 再配套适当缩小页池和检索窗口。网盘包提供对应一键配置入口，详见[完整步骤](OFFLINE_BUNDLE.md)。
+显存处理顺序：优先开启混合显卡模式 → 对实际引擎关闭CUDA系统内存回退（保留7GiB KVMem Host KV）→ 关闭无关后台应用 → 仍不足配套适当缩小页池和检索窗口。网盘包提供对应一键配置入口，详见[完整步骤](OFFLINE_BUNDLE.md)。
 
 给部署者或 Agent 的完整操作顺序、版本表、启动设置和踩坑处理，见 [部署与维护交接手册](DEPLOYMENT_AGENT_GUIDE.md)。
 
@@ -12,13 +12,13 @@ v0.1.5离线双版本包请先读[整合包安装](OFFLINE_BUNDLE.md)和[纠错�
 
 **新设备 / 新部署先用 `DeviceKV=36864`、`RetrieveTokens=3840` 的完整默认组合。** 这是相对进阶档较保守的起点，不是所有 12GB 设备都能无条件启动的保证。先关闭不需要的独显应用，为实际引擎单独禁用 CUDA 系统内存回退；确认权重和 Graph 正常加载，再验收短任务、完全相同请求的缓存重复、工具结果续接和对应目标长度的召回。
 
-维护者的 **`39168 / 6144` 是进阶组合**，不是安装默认值。配套 `SinkTokens=12288`、`RecentTokens=19456`、Host KV 7168 MiB、MTP3、chunk128、xhigh。自 v0.1.3 起默认使用 NVFP4；旧 v0.1.2 的 RK4V4 实测启动 CUDA 可用约 84 MiB，128K 藏针首次/重复 5/5、200K 均 4/5。这是历史结果，不适合作为当前 NVFP4 的显存或质量承诺。8192 检索档长文测试未完成。[历史实测](BENCHMARKS.md#语义历史修复与检索预算2026-10-16) · [NVFP4 历史实测](NVFP4_SM120.md)
+维护者的 **`39168 / 6144` 是进阶组合**，不是安装默认值。配套 `SinkTokens=12288`、`RecentTokens=19456`、Host KV 7168 MiB、MTP3、chunk128、xhigh。v1.1.0 默认使用 **RK4V4 + GDN FP32**；同池 RK4V4 比 NVFP4 少约 20 MiB。旧 v0.1.2 的 RK4V4 128K 藏针 5/5、200K 4/5 是历史结果，不适合作为当前质量承诺。8192 检索档长文测试未完成。[历史实测](BENCHMARKS.md#语义历史修复与检索预算2026-10-16) · [NVFP4 历史实测](NVFP4_SM120.md)
 
 每次只增加一档并记录配置、启动 CUDA 余量、GPU 峰值、缓存续接和召回；出现分配失败或页池耗尽时恢复上一档，再定位原因。**不要只把 DeviceKV 调小而维持装不下的 sink/recent/retrieve/MTP/尾页预算**；若默认组合也放不下，先查实际占用，必须缩窗口时说明召回影响并单独验证，不能称为无损适配。扩大 DeviceKV 也不会自动扩大逻辑上下文上限。
 
-## NVFP4 显存与 RK4V4 切换
+## KV 格式切换（默认 RK4V4）
 
-v0.1.5 延续 v0.1.3 的默认 `KVDType=nvfp4`。**相对此前 RK4V4 配置，NVFP4 增加了一些显存占用；显存很紧张时可以自行换回 RK4V4。** 两者都由同一个新版 exe 支持，Host 压力回收等通用修复继续保留。NVFP4 专用调度不新增常驻 GPU buffer；显存增量与 KV 格式 / 工作区有关，实际差值随配置变化，不给固定 MiB 承诺。
+v1.1.0 默认 `KVDType=rk4v4` + GDN FP32。**同池 RK4V4 比 NVFP4 少约 20 MiB；NVFP4 不是省显存选项。** 两者都由同一个新版 exe 支持，Host 压力回收等通用修复继续保留。切换格式会重建 GPU / Host KV 缓存，可能改变输出，不能承诺相同质量。
 
 先等待任务结束，用本安装 `stop.cmd` 关闭，在 `config/local.json` 添加或修改以下字段，再运行 `start.cmd`：
 
@@ -26,9 +26,9 @@ v0.1.5 延续 v0.1.3 的默认 `KVDType=nvfp4`。**相对此前 RK4V4 配置，N
 "KVDType": "rk4v4"
 ```
 
-该行放在已有 JSON 对象中，注意相邻字段的逗号。换回 NVFP4 则设为 `"nvfp4"`。启动器只接受这两种值；**旧配置缺少 `KVDType` 时默认 NVFP4**，希望升级后维持 RK4V4 的使用者应先显式添加该字段。无需换 exe、重新转换权重或删除会话；重启后 GPU / Host KV 缓存重建，切换格式可能改变输出，不能承诺相同质量。
+如需显式切回 NVFP4，则设为 `"nvfp4"`。启动器只接受这两种值；**旧配置缺少 `KVDType` 时默认 RK4V4**。GDN 默认 FP32；启动器不再传 `--gdn-state-fp16`，如自行构建需保留该默认。
 
-维护者当前 NVFP4 进阶档启动日志约 64 MiB CUDA 余量；旧 RK4V4 的约 84 MiB 是另一轮历史记录，不能相减当作严格显存对照，也不能用整卡驱动空闲代替 CUDA 余量。先保留公开 `36864 / 3840` 起步组合；不要因换回 RK4V4 就跳过缓存、工具续接和目标长度验收。[本版更新与验证边界](RELEASE_NOTES.md)
+维护者当前 RK4V4 + GDN32 全池进阶档峰值 11,220–11,236 MiB，运行时余量约 12 MiB；这是本机记录，不是所有 12GB 设备的保证。先保留公开 `36864 / 3840` 起步组合；不要因默认 RK4V4 就跳过缓存、工具续接和目标长度验收。[本版更新与验证边界](RELEASE_NOTES.md) · [v1.1.0 数据](QUALITY_FIDELITY_V1.1.0.md)
 
 ## 显卡模式与显存准备
 
@@ -117,4 +117,4 @@ print(json.load(urllib.request.urlopen(request, timeout=300)))
 | dsh 更新后行为变化 | 该版本固定 `0.1.5-rc.3`；补丁有版本检查，不直接覆盖其他版本 |
 | 网页打不开 / 代理失败 | 检查自己的网络代理；本项目不修改 Windows 全局代理 |
 
-出现问题时提交 [Issue](https://github.com/CSUNX233/qwen3.8-27b-ninfer-5070tilaptop-kvmem-local-agent/issues)，附硬件、驱动、配置和删去隐私后的错误信息。
+出现问题时提交 [Issue](https://github.com/CSUNX233/Sparkle-Qwen27b-Kvmem-ninfer/issues)，附硬件、驱动、配置和删去隐私后的错误信息。

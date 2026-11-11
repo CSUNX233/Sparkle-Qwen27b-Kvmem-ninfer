@@ -51,4 +51,17 @@ node --test integrations/tests/tool-grounded-execution.test.mjs
 node --test integrations/dsh/local-agent/tests/*.test.mjs
 ```
 
-本轮仓库内 14/14 通过（edit-guard 10、task-ledger 4）。停用：从网页 profile 删除对应 `id: edit-guard` / `id: task-ledger` 项并重载；升级引擎的查询开关在启动前清除 `NINFER_KVMEM_QUERY_MODE`、`NINFER_KVMEM_SUFFIX_REFRESH`、`NINFER_KVMEM_QUERY_ASSEMBLE` 并重启。
+本轮仓库内 22/22 通过（edit-guard 10、task-ledger 4、state-card 8）。停用：从网页 profile 删除对应 `id: edit-guard` / `id: task-ledger` 项并重载；升级引擎的查询开关在启动前清除 `NINFER_KVMEM_QUERY_MODE`、`NINFER_KVMEM_SUFFIX_REFRESH`、`NINFER_KVMEM_QUERY_ASSEMBLE` 并重启。
+
+## 确定性状态卡（v1.1.0）
+
+`local-agent/state-card.mjs` 在显著工具结果后追加一条 `source.plugin = local-state-card` 的确定性用户消息，内容为目标、当前文件、最近尝试、最后成功/错误、代码签名与常量摘要。触发条件：工具错误立即；`write`/`edit` 每次；`pwsh`/`bash` 每 3 次。相同内容去重，单卡上限 1900 字符。它不修改历史、工具参数、系统提示、采样、KV 或工具 schema，也不执行工具或额外发起模型请求。
+
+- **嵌套结果**：递归展开 web/headless 的 `tool-result.content`，否则错误与代码摘要会得到空文本。
+- **媒体保护**：会话一旦包含图片（用户消息或工具结果中的 image block），停止注入状态卡，避免在视觉会话里改变消息/token 边界。该保护只影响新注入，不能修复已经压缩或已包含状态卡的旧会话。
+- **计划模式**：plan 模式不注入。
+- 安装器默认把 `state-card` 加入生成的 web profile；在 `config/local.json` 设置 `"StateCard": false` 并重新运行 `scripts/configure-dsh.mjs` 可持久停用，或在启动前设置 `LOCAL_STATE_CARD=0` 临时停用。手动 profile 可参考 `integrations/dsh/state-card.example.yml`。
+
+5 次多文件重构 A/B（headless，独立目录，state-card + 临时放宽 pruner 的 P0 条件）均值为：P0 15.8 步 / 23.4 次工具 / 0.8 次重复 / 43,164 上下文 / 260 秒；baseline 16.0 / 25.4 / 2.40 / 53,825 / 348 秒；两边 5/5 测试通过。步数只下降 1.3%，范围重叠（baseline r3/r4 已达 15 步/0 重复/36K，P0 r4 反而 19 步），**n=5 不构成统计显著**；方向性信号是重复调用、上下文、输出和耗时更低。详细限制见[质量保真记录](../docs/QUALITY_FIDELITY_V1.1.0.md)。
+
+pruner 阈值放宽与 `pruner-bridge.mjs` 只保留在实验层，**未并入 web profile**；不要把它们的行为归因于 state-card。另有一个已记录的多图 + compaction 后 `scatter` 失败，当前处理是开新会话并使用带媒体保护的 state-card v0.1.2；根因仍在引擎视觉/状态张量路径，详见同一记录。

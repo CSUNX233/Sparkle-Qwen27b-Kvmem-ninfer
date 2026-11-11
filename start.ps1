@@ -2,9 +2,19 @@ param([switch]$EngineOnly, [switch]$NoOpen, [string]$Config = 'config/local.json
 . (Join-Path $PSScriptRoot 'scripts/common.ps1')
 Initialize-LocalEnvironment
 $cfg = Read-LocalConfig $Config
-$kvDType = 'nvfp4'
+$kvDType = 'rk4v4'
 if ($cfg.PSObject.Properties['KVDType']) { $kvDType = [string]$cfg.KVDType }
 if ($kvDType -notin @('nvfp4', 'rk4v4')) { throw 'KVDType must be nvfp4 or rk4v4. See docs/INSTALL.md.' }
+$overlapPredecessor = $true
+if ($cfg.PSObject.Properties['OverlapPredecessor']) {
+    if ($cfg.OverlapPredecessor -isnot [bool]) { throw 'OverlapPredecessor must be a JSON boolean.' }
+    $overlapPredecessor = $cfg.OverlapPredecessor
+}
+$stateCard = $true
+if ($cfg.PSObject.Properties['StateCard']) {
+    if ($cfg.StateCard -isnot [bool]) { throw 'StateCard must be a JSON boolean.' }
+    $stateCard = $cfg.StateCard
+}
 $penaltyScope = 'answer'
 if ($cfg.PSObject.Properties['AnswerPenaltyScope']) { $penaltyScope = [string]$cfg.AnswerPenaltyScope }
 if ($penaltyScope -notin @('answer', 'carry-over')) { throw 'AnswerPenaltyScope must be answer or carry-over. See docs/ANSWER_PENALTY_SCOPE.md.' }
@@ -39,6 +49,10 @@ try {
     $env:NINFER_HOST_PAGEABLE='1'
     $env:NINFER_KV_LEASE_RING='1'
     $env:NINFER_KVMEM_HARVEST_TEXT='1'
+    # v1.1.0: complete-query-gated predecessor fill. Set OverlapPredecessor=false
+    # (or NINFER_KVMEM_OVERLAP_PREDECESSOR=0) to restore v1.0.0 selection.
+    $env:NINFER_KVMEM_OVERLAP_PREDECESSOR = if ($overlapPredecessor) { '1' } else { '0' }
+    $env:LOCAL_STATE_CARD = if ($stateCard) { '1' } else { '0' }
     # Qualified semantic-history repairs. Explicit 0 remains available for diagnosis.
     if (-not $env:NINFER_KVMEM_INDEX_DECODE) { $env:NINFER_KVMEM_INDEX_DECODE='1' }
     if (-not $env:NINFER_KVMEM_CACHE_QUERY) { $env:NINFER_KVMEM_CACHE_QUERY='1' }
@@ -50,7 +64,7 @@ try {
     $engineArgs=@($model,'--model-id',$cfg.ModelId,'--chat-template',(Join-Path $PSScriptRoot 'templates/chat_template_qwen3.8-enhanced.jinja'),
         '--max-context',[string]$cfg.MaxContext,'--kv-capacity',[string]$cfg.DeviceKV,'--max-concurrency','1','--max-shared-prefixes','0',
         '--kv-dtype',$kvDType,'--host-kv-mib',[string]$cfg.HostKVMiB,'--cuda-graph-allowance-mib','64','--prefill-chunk','128',
-        '--gdn-state-fp16','--spec','mtp','--draft-tokens','3','--default-max-tokens','0','--kv-lease-growth',
+        '--spec','mtp','--draft-tokens','3','--default-max-tokens','0','--kv-lease-growth',
         '--default-reasoning-effort',$cfg.ReasoningEffort,'--presence-penalty','1.0','--post-thinking-sampler','temp=0.7,top_p=0.95,presence=1.0',
         '--recover-invariant-failures','--context-cache-policy','rolling','--release-diverged-checkpoints','--recency-eviction',
         '--host-state-slots','8','--auto-long-anchors','--long-anchor-spacing','49152','--max-long-anchors-per-continuation','2',

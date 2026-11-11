@@ -1,0 +1,63 @@
+{
+  "generated": "2026-11-11",
+  "fixture": {
+    "context_chars": 464400,
+    "estimated_context_tokens": 116000,
+    "report_chars": 20065,
+    "fact": "PRUNER-7391",
+    "fact_offset_chars": 10040
+  },
+  "deterministic_prune_content": [
+    {
+      "config": "default 8192/4096/1024",
+      "trimmed": true,
+      "output_chars": 5159,
+      "fact_retained": false
+    },
+    {
+      "config": "P0 65536/24576/8192",
+      "trimmed": false,
+      "output_chars": 20065,
+      "fact_retained": true
+    }
+  ],
+  "model_level_runs": [
+    {
+      "condition": "baseline",
+      "steps": 12,
+      "tool_calls": 11,
+      "elapsed_s": 454.9,
+      "fact_in_stdout": true,
+      "answer": "PRUNER-7391",
+      "note": "headless occurrence-time hook produced no tool-prune log; the 20K report was not trimmed"
+    },
+    {
+      "condition": "pruner-only",
+      "steps": 13,
+      "tool_calls": 12,
+      "elapsed_s": 144.6,
+      "fact_in_stdout": true,
+      "answer": "PRUNER-7391",
+      "note": "same hook gap; this run cannot distinguish the threshold change"
+    }
+  ],
+  "bridge_runs": [
+    {
+      "condition": "baseline_bridge",
+      "steps": 13,
+      "tool_calls": 12,
+      "elapsed_s": 75.0,
+      "fact_in_stdout": true,
+      "note": "stored tool result trimmed 20002->5159; model later used a 103-char targeted read"
+    },
+    {
+      "condition": "p0_bridge",
+      "steps": 6,
+      "tool_calls": 5,
+      "elapsed_s": 92.6,
+      "fact_in_stdout": true,
+      "note": "50K context / 20K report retained"
+    }
+  ],
+  "conclusion": "The pruner config change is deterministic at pruneContent level, but the headless runtime hook did not fire and fact recall is not a valid differentiator. Pruner thresholds and pruner-bridge remain experiment-only and are not in the v1.1.0 daily profile."
+}

@@ -1,5 +1,7 @@
 # 本发行版的修改范围
 
+v1.1.0（2026-11-11）在 v1.0.0 发布源码上增加两项底层引擎修复：[完整查询评分后补齐前邻页](DEFERRED_NEIGHBOR_FIX.md)（每次最多 8 页、不增加检索总页数、默认关闭的 `NINFER_KVMEM_RANK_AUDIT_DIR` 审计）和[畸形工具外壳最小修复](TOOL_ENVELOPE_FIX.md)（只报 `malformed_tool_call`，不执行原参数）。验证引擎 SHA-256 `8b2c195e32e3b58a3584b284679c990a07986691967f1b939b0fe31351559012`。部署默认改为 RK4V4 + GDN FP32，并接入 dsh 状态卡 v0.1.2；pruner 阈值放宽与 pruner-bridge 未并入。源码补丁为 `benchmarks/qualification/deferred-neighbor-c287b7d.patch` 与 `tool-envelope-c287b7d.patch`，数据见 [v1.1.0 质量保真记录](QUALITY_FIDELITY_V1.1.0.md) 和 `benchmarks/evidence/v1.1.0/`。以下 v1.0.0 段落保留历史记录。
+
 v1.0.0（2026-10-27）在 v0.1.5 基线上发布查询层与 agent 执行层升级：[路径查询实验](PATH_QUERY_EXPERIMENT.md)的 `related-tool-head`、`suffix refresh=tail`、`QUERY_ASSEMBLE=1`，以及 [执行前校验/多动作账本](../integrations/README.md)。真实 116,907-token 故障历史完整路径 1/4→4/4、留出 4/8→8/8；因果 8/8、短续接 10/12 路径保持；旧延迟压力首轮仍 2/4。H7 等权双查询、H8 固定事务页、H11 工具头扩展拒绝并归档，不默认启用。引擎源码仍保留 legacy 默认，发布启动器显式设置三个开关；验证引擎 SHA-256 `71259a21f7b525ca7477193a292e4d3623cc58b9efd785005ee934cc29673507`，原 v0.1.5 引擎 `38bc4d8c6be07afd6c74b902cc33403bf2ee139a2c50129d363d68d74a7609d6` 作为回退。以下 H7/H8 段落是 v1.0.0 之前的实验历史。
 
 后续 H7 等权双查询另做 96 次请求，含 48 次 xhigh；探索改善在留出未稳定复现，长续接留出严格完成反而从 8/8 降为 4/8。该实验已独立归档，H7 代码从当前开发源码撤回，保留此前 H6 改动，不替换日常。具体指标与资源代价见同页 H7 记录。
