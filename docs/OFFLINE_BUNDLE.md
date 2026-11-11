@@ -40,7 +40,7 @@ GSQ文字模型约10.06GiB，Huihui视觉制品约10.91GiB；**视觉制品也�
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-bundle.ps1 -ModelPath "D:\Models\model.ninfer" -ModelId "my-qwen-model"
 ```
 
-默认NVFP4、xhigh、MTP3、逻辑262144、DeviceKV36864 / Retrieve3840 / HostKV7168MiB、sink12288 / recent19456、AnswerPenaltyScope=answer，启用C2.1锚点和batch32。16GB卡选择IQ3_S时同样先保留起步预算再验证，不自动扩大页池。
+默认 **RK4V4 + GDN FP32**、xhigh、MTP3、逻辑262144、DeviceKV36864 / Retrieve3840 / HostKV7168MiB、sink12288 / recent19456、AnswerPenaltyScope=answer，启用C2.1锚点和batch32。16GB卡选择IQ3_S时同样先保留起步预算再验证，不自动扩大页池。NVFP4 不是省显存选项；v1.1.0 的日常进阶档与数据见 [v1.1.0 记录](QUALITY_FIDELITY_V1.1.0.md)。
 
 ## 文字与CPU视觉切换
 

@@ -3,7 +3,7 @@
   "upstream": "https://github.com/iamwavecut/ninfer-all",
   "upstream_base_reported_by_bundle": "v0.11.0-rtx3090; KVMem integration reference 65dbd4f2",
   "original_git_history_available": false,
-  "engine_binary_sha256": "38bc4d8c6be07afd6c74b902cc33403bf2ee139a2c50129d363d68d74a7609d6",
+  "engine_binary_sha256": "8b2c195e32e3b58a3584b284679c990a07986691967f1b939b0fe31351559012",
   "copy_count": 2407,
   "locally_recorded_modified_files": [
     "docs/serving.md",
@@ -86,11 +86,11 @@
     "contribution": "Provided the foundation distribution downloaded by the maintainer and resolved the reported infinite-loop issue.",
     "source": "Maintainer attribution supplied for this publication; not a claim of sole upstream authorship."
   },
-  "release_source_url": "https://github.com/CSUNX233/qwen3.8-27b-ninfer-5070tilaptop-kvmem-local-agent/tree/v0.1.5",
+  "release_source_url": "https://github.com/CSUNX233/Sparkle-Qwen27b-Kvmem-ninfer/tree/v1.1.0",
   "previous_release": {
-    "version": "0.1.4",
-    "engine_binary_sha256": "8804cb04470214f68e01e38cb07004c90e748507a77134995335d1edbd768472",
-    "source_url": "https://github.com/CSUNX233/qwen3.8-27b-ninfer-5070tilaptop-kvmem-local-agent/tree/v0.1.4"
+    "version": "1.0.0",
+    "engine_binary_sha256": "71259a21f7b525ca7477193a292e4d3623cc58b9efd785005ee934cc29673507",
+    "source_url": "https://github.com/CSUNX233/Sparkle-Qwen27b-Kvmem-ninfer/tree/v1.0.0"
   },
   "retrieval_context_patch": {
     "engine_sha256": "34fd593d76bd332c1b8470ce5ffe4fd9e7e9820229558cffd1cf9ddaa386224b",
@@ -451,6 +451,30 @@
       "12 targeted regressions, two greedy long-context synthetic fixtures (7 requests each) and 7 API smoke requests; not a general quality benchmark.",
       "GPU peak sampled every 5 seconds; no matched original-v0.1.4 VRAM comparison.",
       "No full-256K, full CTest or all-GPU qualification. Anchors use bounded Host memory and can be evicted."
+    ]
+  },
+  "release_1_1_0": {
+    "date": "2026-11-11",
+    "source_tag": "v1.1.0",
+    "engine_sha256": "8b2c195e32e3b58a3584b284679c990a07986691967f1b939b0fe31351559012",
+    "previous_daily_sha256": "71259a21f7b525ca7477193a292e4d3623cc58b9efd785005ee934cc29673507",
+    "intermediate_predecessor_sha256": "516e31d05e27f03ca8beac12d4af6663a32073d700a2c2eeee6b1e5760b381e9",
+    "scope": "Complete-query-gated predecessor page fill (max 8 pages, no increase in selected pages, default-off rank audit) and minimal malformed <tool_call> envelope reporting; RK4V4 + GDN FP32 launcher defaults; dsh state-card v0.1.2.",
+    "engine_version_string": "1.0.0 base; identify by SHA-256 and tag",
+    "patches": [
+      "benchmarks/qualification/deferred-neighbor-c287b7d.patch",
+      "benchmarks/qualification/tool-envelope-c287b7d.patch"
+    ],
+    "evidence": [
+      "docs/QUALITY_FIDELITY_V1.1.0.md",
+      "benchmarks/evidence/v1.1.0/"
+    ],
+    "build": "Incremental host rebuild from fixed c287b7d plus the two patches; 71 Host units and 11 verified CUDA objects, retaining original static archives. Not a clean full build.",
+    "limitations": [
+      "Only 110K and 218K long fixtures were rerun for the predecessor fix.",
+      "Multi-image + compaction scatter failure remains unresolved.",
+      "State-card A/B n=5 is directional, not statistically significant.",
+      "Only Windows x64 sm120a / RTX 5070 Ti Laptop 12GB was directly validated."
     ]
   }
 }

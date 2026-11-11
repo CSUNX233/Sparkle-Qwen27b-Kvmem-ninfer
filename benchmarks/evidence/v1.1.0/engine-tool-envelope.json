@@ -1,0 +1,23 @@
+{
+  "change": "minimal malformed <tool_call> envelope fix",
+  "base_commit": "c287b7d",
+  "patch": "benchmarks/qualification/tool-envelope-c287b7d.patch",
+  "engine_sha256": "8b2c195e32e3b58a3584b284679c990a07986691967f1b939b0fe31351559012",
+  "problem": "A closed <tool_call> envelope contained =job_output> without the function opener and with malformed parameter tags. The old parser returned ordinary text, so dsh ended the turn.",
+  "behavior": [
+    "Recognizes only a standalone whole answer consisting of a closed envelope, valid function name, parameter opener and complete function/tool_call close.",
+    "Routes it to the existing malformed_tool_call error path; never executes or guesses the original arguments.",
+    "Adds intended_function and a correct Qwen tag example to the error arguments.",
+    "Ordinary text, Markdown fences/inline code, truncated envelopes and valid job_output keep their old paths."
+  ],
+  "validation": [
+    "Full existing C++ parser suite plus the new regression passed.",
+    "Byte-for-byte replay of the field string produces one error placeholder, without executing job_output or write.",
+    "A real dsh tool runtime returned unknown-tool; the native Qwen then produced the correct job_output call, followed by a simulated completion result and DONE.",
+    "GPU peak 11234 MiB on the short fixture; no new GPU buffers or page-pool changes."
+  ],
+  "boundaries": [
+    "No automatic retry, forced sampling, history truncation or background execution was added.",
+    "The 110K/218K long fixtures and the full private 61-tool session were not rerun."
+  ]
+}

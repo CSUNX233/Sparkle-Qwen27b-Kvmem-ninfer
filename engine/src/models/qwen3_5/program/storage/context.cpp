@@ -1855,7 +1855,19 @@ std::vector<std::uint32_t> ProgramImpl::select_retrieval_pages(const SequenceSta
     // with NINFER_TERNARY_KVMEM_SCORE unset nothing is published, this block is skipped, and the
     // engine must reproduce the old readings exactly (the disjoint arm goes back to its pre-fix 4/6).
     {
-        selected = ops::detail::kvmem_score_retrieval_pages(begin, end, budget);
+        auto& score = ops::detail::kvmem_score_probe();
+        const bool reached_end = score.abs_query_begin >= 0 &&
+            score.abs_query_end > score.abs_query_begin && score.abs_chunk_begin >= 0 &&
+            score.abs_chunk_begin < score.abs_query_end && score.chunk_tokens > 0 &&
+            static_cast<std::int64_t>(score.abs_chunk_begin) + score.chunk_tokens >= score.abs_query_end;
+        const bool complete_capture = score.query && score.query->begin == score.abs_query_begin &&
+            score.query->end == score.abs_query_end && score.query->origin == score.abs_query_begin &&
+            score.query->tokens == score.abs_query_end - score.abs_query_begin &&
+            score.query_span_tokens == score.query->tokens && score.query->identity == score.query_identity;
+        const bool oversized = score.abs_query_end > score.abs_query_begin &&
+            score.abs_query_end - score.abs_query_begin > ops::detail::kvmem_query_capture_limit();
+        const bool ready = reached_end && (complete_capture || oversized || !ops::detail::kvmem_cached_query_enabled());
+        selected = score.page_ranking.select_ready(begin, end, budget, ready);
         if (!selected.empty()) { return selected; }
     }
     // The ledger is only needed by the lexical fallback below; an empty ledger is not a reason to skip

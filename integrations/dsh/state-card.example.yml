@@ -1,0 +1,10 @@
+# Optional manual mount for state-card. configure-dsh.mjs already adds this row
+# to the generated web profile; use this snippet only for a profile you manage.
+#
+# Replace D:/path/to with this checkout's absolute path and keep a real ?v=
+# content tag (any value works; the installer uses the file SHA-256 prefix).
+# Disable at runtime without editing the profile: set LOCAL_STATE_CARD=0 before
+# starting dsh. The card is skipped in plan mode and in sessions containing images.
+- insert:
+    - id: state-card
+      name: 'file:///D:/path/to/ninfer/integrations/dsh/local-agent/state-card.mjs?v=0.1.2'

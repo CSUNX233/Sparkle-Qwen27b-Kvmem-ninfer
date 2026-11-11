@@ -832,8 +832,41 @@ bool region_opens_function(std::string_view region) {
     return has_name_attribute && tag_end != std::string_view::npos;
 }
 
+// A closed, otherwise standalone envelope can lose only the function opener's prefix
+// ("=job_output>"). Recognize it solely to report an error, never to execute its arguments.
+std::string_view orphaned_function_name(std::string_view region, std::size_t max_name_length) {
+    while (!region.empty() && is_format_whitespace(region.back())) { region.remove_suffix(1); }
+    if (!region.starts_with(kToolOpen) || !region.ends_with(kToolClose)) { return {}; }
+    std::size_t pos = kToolOpen.size();
+    skip_format_whitespace(region, pos);
+    if (pos == region.size() || region[pos] != '=') { return {}; }
+    const std::size_t end = region.find('>', pos + 1);
+    if (end == std::string_view::npos) { return {}; }
+    const std::string_view name = region.substr(pos + 1, end - pos - 1);
+    if (!valid_function_name(name, max_name_length)) { return {}; }
+    pos = end + 1;
+    skip_format_whitespace(region, pos);
+    if (!starts_with_at(region, pos, kParamOpen)) { return {}; }
+    const std::size_t close = region.find(kFunctionClose, pos);
+    if (close == std::string_view::npos || region.find(kToolOpen, pos) != std::string_view::npos) {
+        return {};
+    }
+    pos = close + kFunctionClose.size();
+    skip_format_whitespace(region, pos);
+    return region.substr(pos) == kToolClose ? name : std::string_view{};
+}
+
 std::string malformed_call_arguments(std::string_view call_text, std::size_t max_name_length) {
     Json arguments          = Json::object();
+    if (const auto orphan = orphaned_function_name(call_text, max_name_length); !orphan.empty()) {
+        arguments["intended_function"] = std::string(orphan);
+        arguments["error"] =
+            "No tool ran: the function opener and parameter tags were malformed. Retry the "
+            "intended tool using <tool_call><function=NAME><parameter=ARG>VALUE</parameter>"
+            "</function></tool_call>. Put VALUE after the parameter tag's >, not inside its "
+            "name. malformed_tool_call is an error report, not a tool to call.";
+        return arguments.dump();
+    }
     std::size_t pos         = 0;
     const TagForm* function = opened_function(call_text, pos);
     if (function != nullptr) {
@@ -1156,7 +1189,11 @@ ParsedToolCallOutput parse_qwen_tool_call_output(const std::string& text,
         const std::string_view tool_region = source.substr(region.first);
         // A wrapper named in prose opens no function and stays text. This also prevents the
         // bounded candidate search from turning its first quoted marker into an error call.
-        if (!region_opens_function(tool_region)) {
+        const bool standalone_orphan =
+            source.substr(0, region.first).find_first_not_of(" \t\r\n\f\v") ==
+                std::string_view::npos &&
+            !orphaned_function_name(tool_region, max_tool_name_length).empty();
+        if (!region_opens_function(tool_region) && !standalone_orphan) {
             return fallback(text, out.diagnostics);
         }
         out.content = rtrim_format_whitespace(source.substr(0, region.first));

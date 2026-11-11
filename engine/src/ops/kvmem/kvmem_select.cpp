@@ -1,3 +1,13 @@
+#include "overlap_predecessors.h"
+#include <charconv>
+#include <cstring>
+#include <optional>
+#include <cstdio>
+#include <fstream>
+#include <filesystem>
+#include <iomanip>
+#include <limits>
+#include <cstdlib>
 // Modified in the CSUNX233 RTX 5070 Ti Laptop distribution. See ../docs/MODIFICATIONS.md.
 #include "ops/kvmem/kvmem_select.h"
 
@@ -173,8 +183,47 @@ KvMemSelectResult kvmem_select_blocks(const KvMemSelectConfig& config, const flo
     return out;
 }
 
+
+namespace {
+thread_local unsigned long long rank_audit_generation = 0;
+thread_local unsigned long long rank_audit_selection = 0;
+const char* rank_audit_dir() {
+    static const char* value = std::getenv("NINFER_KVMEM_RANK_AUDIT_DIR");
+    return value && *value ? value : nullptr;
+}
+void audit_ranking(std::span<const std::int32_t> kept, std::span<const float> scores,
+                   std::int32_t count) noexcept {
+    if (!rank_audit_dir()) return;
+    ++rank_audit_generation;
+    try {
+        auto file = std::filesystem::path(rank_audit_dir()) /
+            ("scores-"+std::to_string(rank_audit_generation)+".tsv");
+        std::ofstream out(file);
+        out << "page\tscore\tstage1\n" << std::setprecision(std::numeric_limits<float>::max_digits10);
+        for (int i=0; i<count && static_cast<std::size_t>(i)<scores.size(); ++i)
+            out << i << '\t' << scores[i] << '\t'
+                << (std::find(kept.begin(),kept.end(),i)!=kept.end()) << '\n';
+    } catch (...) { /* Explicit fixture diagnostics must not alter selection. */ }
+}
+void audit_selected(std::uint32_t begin, std::uint32_t end, std::uint32_t budget,
+                    std::span<const std::uint32_t> selected) noexcept {
+    if (!rank_audit_dir()) return;
+    try {
+        auto file = std::filesystem::path(rank_audit_dir()) /
+            ("selection-"+std::to_string(rank_audit_generation)+"-"+
+             std::to_string(++rank_audit_selection)+".json");
+        std::ofstream out(file);
+        out << "{\"generation\":" << rank_audit_generation << ",\"begin\":" << begin
+            << ",\"end\":" << end << ",\"budget\":" << budget << ",\"selected\":[";
+        for (std::size_t i=0;i<selected.size();++i) { if(i)out<<',';out<<selected[i]; }
+        out << "]}\n";
+    } catch (...) { }
+}
+}
+
 void KvMemPageRanking::update(std::span<const std::int32_t> kept, std::span<const float> scores,
                               std::int32_t scored_blocks) {
+    audit_ranking(kept, scores, scored_blocks);
     ranked_.clear();
     ranked_.reserve(kept.size());
     cacheable_ = true;
@@ -193,8 +242,28 @@ void KvMemPageRanking::update(std::span<const std::int32_t> kept, std::span<cons
     }
 }
 
-std::vector<std::uint32_t> KvMemPageRanking::select(std::uint32_t begin, std::uint32_t end,
-                                                  std::uint32_t budget) const {
+static std::optional<std::uint32_t> overlap_recent_pages() {
+    static const std::optional<std::uint32_t> pages = []() -> std::optional<std::uint32_t> {
+        const char* mode=std::getenv("NINFER_KVMEM_OVERLAP_PREDECESSOR");
+        if (!mode || std::strcmp(mode,"1")!=0) return std::nullopt;
+        const char* text=std::getenv("NINFER_KV_WINDOW");
+        std::uint64_t tokens=0;
+        if (text) {
+            const auto end=text+std::strlen(text);
+            const auto parsed=std::from_chars(text,end,tokens);
+            if (parsed.ec==std::errc{} && parsed.ptr==end && tokens>0 && tokens<=UINT32_MAX) {
+                std::fprintf(stderr,"[overlap-predecessor] enabled recent_tokens=%llu max_changes=8 max_anchors=8\n",static_cast<unsigned long long>(tokens));
+                return static_cast<std::uint32_t>((tokens+63)/64);
+            }
+        }
+        std::fprintf(stderr,"[overlap-predecessor] invalid recent window; disabled\n");
+        return std::nullopt;
+    }();
+    return pages;
+}
+
+std::vector<std::uint32_t> KvMemPageRanking::select_ready(std::uint32_t begin, std::uint32_t end,
+                                                  std::uint32_t budget, bool ready_for_supplement) const {
     std::vector<std::uint32_t> selected;
     if (budget == 0 || end <= begin) { return selected; }
     selected.reserve(std::min<std::size_t>(budget, ranked_.size()));
@@ -215,8 +284,19 @@ std::vector<std::uint32_t> KvMemPageRanking::select(std::uint32_t begin, std::ui
         if (filtered.size() > budget) { filtered.resize(budget); }
         for (const auto& entry : filtered) { selected.push_back(entry.second); }
     }
+    if (cacheable_ && ready_for_supplement) {
+        if (const auto recent=overlap_recent_pages()) {
+            selected=overlap_predecessor_pages(selected,begin,end,*recent);
+        }
+    }
     std::sort(selected.begin(), selected.end());
+    audit_selected(begin, end, budget, selected);
     return selected;
+}
+
+std::vector<std::uint32_t> KvMemPageRanking::select(std::uint32_t begin, std::uint32_t end,
+                                                  std::uint32_t budget) const {
+    return select_ready(begin,end,budget,false);
 }
 
 } // namespace ninfer::ops

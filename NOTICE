@@ -1,6 +1,6 @@
-NInfer RTX 5070 Ti Laptop KVMem Local Agent distribution
+Sparkle-Qwen27b-Kvmem-ninfer distribution
 Maintainer and local integration: CSUNX233 (2026)
-https://github.com/CSUNX233/qwen3.8-27b-ninfer-5070tilaptop-kvmem-local-agent
+https://github.com/CSUNX233/Sparkle-Qwen27b-Kvmem-ninfer
 
 Special thanks: Bilibili creator 0xFFFF7 provided the foundation distribution
 downloaded by this project's maintainer and resolved the reported infinite-loop

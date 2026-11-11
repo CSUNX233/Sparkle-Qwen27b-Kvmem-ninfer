@@ -58,6 +58,8 @@ const entries = [
     { id: 'todo-completion', name: moduleURL('local-agent/todo-completion.mjs') },
     { id: 'tool-grounded-execution', name: moduleURL('local-agent/tool-grounded-execution.mjs'),
       disabled: cfg.ToolGroundedExecution === false },
+    { id: 'state-card', name: moduleURL('local-agent/state-card.mjs'),
+      disabled: cfg.StateCard === false },
     { id: 'mcp-browser', name: '@deepseek-ai/dsh-mcp-client', config: {
       serverName: 'browser', transport: 'stdio', command: process.execPath,
       args: [path.join(dsh, 'local-web/browser-server.mjs')], cwd: path.join(dsh, 'local-web'),
@@ -69,7 +71,7 @@ const entries = [
 // Preserve unrelated user patch entries; replace only entries owned by this installer.
 const patchFile = path.join(profile, 'cordis.patch.yml');
 const previous = document(patchFile, []);
-const owned = new Set(['web', 'web-search-deepseek', 'web-fetch-http', 'web-local', 'todo-completion', 'tool-grounded-execution', 'mcp-browser']);
+const owned = new Set(['web', 'web-search-deepseek', 'web-fetch-http', 'web-local', 'todo-completion', 'tool-grounded-execution', 'state-card', 'mcp-browser']);
 const keep = previous.flatMap(entry => {
   if (owned.has(entry.id)) return [];
   if (entry.insert) { const insert = entry.insert.filter(row => !owned.has(row.id)); return insert.length ? [{ ...entry, insert }] : []; }

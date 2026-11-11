@@ -1,3 +1,39 @@
+# v1.1.0 — 前邻页检索、工具外壳与 RK4V4/GDN32
+
+2026-11-11。发布两项底层引擎改动、RK4V4 + GDN FP32 部署切换和 dsh 状态卡。验证引擎 SHA-256 `8b2c195e32e3b58a3584b284679c990a07986691967f1b939b0fe31351559012`；底座版本号仍显示 1.0.0，请以 SHA-256 和源码标签识别。完整数据与限制见 [v1.1.0 质量保真记录](QUALITY_FIDELITY_V1.1.0.md)。
+
+## 主要变化
+
+- **补齐高分历史页的前邻页。** 重要证据可能跨两个 KV 页，旧选择只命中后半页。新逻辑利用近期范围里的重叠检索名额补前页：每次最多补 **8 页**，只替换近期范围中排名靠后的成员，**检索总页数不增加，原排名中的冷页全部保留**。实现位置在 `kvmem_select` 与 `overlap_predecessors.h`，不扩大页池、不新增 GPU 常驻数组、不改评分公式。
+- **等查询完整评分后再补页。** 只有读到已知 query 结束位置、且完整捕获查询已经评分后才允许补页；未知或未完成 query 保持原选页。这修复了上一候选在 218K 中“只读了一部分就改选页”的退化。
+- **默认关闭的选页诊断日志。** `NINFER_KVMEM_RANK_AUDIT_DIR=<目录>` 才导出每代分数/入选状态和最终页名；未设置时不写文件、不改变选页。目录可能含 prompt 相关页号，不要上传公开日志。
+- **畸形工具外壳最小修复。** 完整 `<tool_call>` 外壳内的 `=job_output>` 缺少 function 开标签、参数标签也不合法；旧解析器当普通文本，dsh 随后正常 stop。新逻辑只识别“整个回答除空白外恰为这种完整外壳、合法函数名、parameter 起始和完整结束”的情形，送入已有 `malformed_tool_call` 错误路径；不猜测、不执行原参数，错误参数中附正确 Qwen 标签例子和 `intended_function`。普通文字、Markdown 围栏/行内代码、截断外壳和合法 `job_output` 保持原路径。
+- **默认 KV 改为 RK4V4 + GDN FP32。** 日常 39,168 / 6,144 配置峰值 11,220–11,236 MiB，相对原日常 11,168 MiB 增加 52–68 MiB；公开示例保留 36,864 / 3,840 起步档。启动器移除 `--gdn-state-fp16`，并默认设置 `NINFER_KVMEM_OVERLAP_PREDECESSOR=1`。
+- **dsh 状态卡 v0.1.2。** 在显著工具结果后追加确定性状态卡；错误立即、写入每次、shell 每 3 次，上限 1,900 字符。修复嵌套 `tool-result.content`，并在会话包含图片后停止注入。`StateCard: false` 或 `LOCAL_STATE_CARD=0` 可关闭；pruner 阈值放宽和 `pruner-bridge` 未并入日常。
+
+## 实测
+
+| 测试 | 原日常 1.0.0 | v1.1.0 日常 |
+|---|---|---|
+| 110K 长文任务 | 耗尽 4096 输出额度，无最终答案 | **12/12，完整完成**（733 token，`stop`，275.9 秒，峰值 11,232 MiB） |
+| 218K 长文任务 | 26/26 | **26/26，完整 JSON 与正确基线一致**（`stop`，峰值 11,240 MiB） |
+| 短上下文 39 题 | — | RK4V4 + GDN32 正确 35/39，TV 0.0262，翻转 0；NVFP4 34/39，TV 0.0288，翻转 1 |
+| 189,954-token 真实内容 | — | 三臂均 24/24 |
+| 工具/JSON 22 条 | 20/22 | 20/22，同失败题 |
+| 多文件重构 5 次 | 16.0 步 / 25.4 调用 / 2.40 重复 / 53,825 上下文 / 348 秒 | 15.8 / 23.4 / 0.80 / 43,164 / 260 秒；5/5 测试；**步数 -1.3%，n=5 不显著** |
+
+## 边界与已知问题
+
+- 110K / 218K 只复测这两个用例，未重跑完整场景矩阵；2 MiB 峰值差已披露，不称为严格零增量。
+- 多图 + compaction 后的请求仍可能在 prefill 报 `scatter: expected src [D,V], indices [V], dst [D,T]`；失败会话继续会复用同一压缩历史，应开新会话。根因在视觉/状态张量路径，本版未修复。
+- 232K 随机串压力多轮不稳定且跨格式共性，不作为发布指标；真实内容 190K 为 24/24。
+- 状态卡 A/B 的 pruner 条件只用于实验，未进入 web profile；步数收益不显著。
+- 仅直接验证 Windows x64 / sm120a 和 RTX 5070 Ti Laptop 12GB；其他架构需自行构建。
+
+## 安装与回退
+
+引擎附件 `ninfer-5070ti-win-x64-sm120a-v1.1.0.zip`，SHA-256 `daa2a6c5ab0c6a1715d839fcaf3ee4954c6c19d2641f9ee9aec6de083a3bae4a`；dsh 单独包 `dsh-state-card-v1.1.0.zip`，SHA-256 `cf37d659dd7439841dda362c0c341ff04377655592e822cadc524f3fd8bf2ab1`。源码标签 `v1.1.0`。回退到 v1.0.0 引擎 `71259a21f7b525ca7477193a292e4d3623cc58b9efd785005ee934cc29673507`，或整套回退 v0.1.5 `38bc4d8c6be07afd6c74b902cc33403bf2ee139a2c50129d363d68d74a7609d6`。开关：`NINFER_KVMEM_OVERLAP_PREDECESSOR=0` 关闭补页，`StateCard: false` / `LOCAL_STATE_CARD=0` 关闭状态卡。
+
 # v1.0.0 — 查询稳定性与 agent 执行校验
 
 2026-10-27。在公开 v0.1.5 / `b79bb9b6eafe9b81c36358adeac44dd51cd36d5d` 上发布可隔离的查询层与 agent 执行层升级。模型权重、NVFP4、39168/6144 页池、MTP3、xhigh、采样和回答惩罚设置均未改变；不是一次全面重写，也不宣称所有指标全面领先。
@@ -76,7 +112,7 @@ H11 的工具查询头扩展（64→128/256）已拒绝：两个夹具的工具�
 
 ## 下载、升级与回退
 
-[v0.1.5 Release](https://github.com/CSUNX233/qwen3.8-27b-ninfer-5070tilaptop-kvmem-local-agent/releases/tag/v0.1.5) 提供引擎和 SHA-256。源码安装用户先停止本安装、备份配置及旧引擎，更新源码，再执行原 `setup.ps1 -ModelPath "<模型.ninfer>"`；只拉源码不会更新 exe。无需重新下载现有模型或清空磁盘会话，进程缓存会重建。[升级步骤](INSTALL.md)
+[v0.1.5 Release](https://github.com/CSUNX233/Sparkle-Qwen27b-Kvmem-ninfer/releases/tag/v0.1.5) 提供引擎和 SHA-256。源码安装用户先停止本安装、备份配置及旧引擎，更新源码，再执行原 `setup.ps1 -ModelPath "<模型.ninfer>"`；只拉源码不会更新 exe。无需重新下载现有模型或清空磁盘会话，进程缓存会重建。[升级步骤](INSTALL.md)
 
 夸克包分 `no-models` 与 `full`，都自带引擎；详细见[整合包说明](OFFLINE_BUNDLE.md)。完整包的视觉制品含 text,vision,mtp；启用后视觉前处理/编码固定 CPU，文字仍在 GPU；默认不启用。回退请成套恢复旧引擎与启动配置，或解压旧版到独立目录，避免旧 exe 接收新增参数；旧 Release 保留。
 

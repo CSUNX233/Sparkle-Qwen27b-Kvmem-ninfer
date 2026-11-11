@@ -1,0 +1,249 @@
+{
+  "generated": "2026-11-11",
+  "scope": "Sanitized aggregates; private session paths, prompts and logs are removed.",
+  "daily_config": {
+    "KVDType": "rk4v4",
+    "GDN": "FP32",
+    "DeviceKV": 39168,
+    "RetrieveTokens": 6144,
+    "SinkTokens": 12288,
+    "RecentTokens": 19456,
+    "HostKVMiB": 7168,
+    "MTP": 3,
+    "prefill_chunk": 128,
+    "reasoning": "xhigh"
+  },
+  "short_context_39q": [
+    {
+      "config": "BF16",
+      "correct": 35,
+      "n": 39,
+      "mean_tv_vs_bf16": 0.0,
+      "max_tv_vs_bf16": 0.0,
+      "prediction_flips_vs_bf16": 0
+    },
+    {
+      "config": "FP8",
+      "correct": 36,
+      "n": 39,
+      "mean_tv_vs_bf16": 0.0152,
+      "max_tv_vs_bf16": 0.0814,
+      "prediction_flips_vs_bf16": 1
+    },
+    {
+      "config": "RK4V4 + GDN16",
+      "correct": 35,
+      "n": 39,
+      "mean_tv_vs_bf16": 0.0224,
+      "max_tv_vs_bf16": 0.1999,
+      "prediction_flips_vs_bf16": 0
+    },
+    {
+      "config": "RK4V4 + GDN32",
+      "correct": 35,
+      "n": 39,
+      "mean_tv_vs_bf16": 0.0262,
+      "max_tv_vs_bf16": 0.2518,
+      "prediction_flips_vs_bf16": 0
+    },
+    {
+      "config": "NVFP4 + GDN32",
+      "correct": 34,
+      "n": 39,
+      "mean_tv_vs_bf16": 0.0288,
+      "max_tv_vs_bf16": 0.1731,
+      "prediction_flips_vs_bf16": 1
+    },
+    {
+      "config": "NVFP4 + GDN16",
+      "correct": 35,
+      "n": 39,
+      "mean_tv_vs_bf16": 0.0299,
+      "max_tv_vs_bf16": 0.1608,
+      "prediction_flips_vs_bf16": 2
+    },
+    {
+      "config": "RK8V4",
+      "correct": 35,
+      "n": 39,
+      "mean_tv_vs_bf16": 0.023,
+      "max_tv_vs_bf16": 0.2062,
+      "prediction_flips_vs_bf16": 2
+    },
+    {
+      "config": "K8V4",
+      "correct": 34,
+      "n": 39,
+      "mean_tv_vs_bf16": 0.0315,
+      "max_tv_vs_bf16": 0.1867,
+      "prediction_flips_vs_bf16": 3
+    }
+  ],
+  "short_context_note": "First-token distribution at temperature 0 with thinking off. Same-config repeats were bit-identical on this path.",
+  "long_context_pins": [
+    {
+      "config": "RK4V4 110K sequential",
+      "matched": 12,
+      "expected": 12,
+      "gpu_peak_mib": 11230,
+      "finish": "stop",
+      "request_seconds": 269.67
+    },
+    {
+      "config": "NVFP4 110K sequential",
+      "matched": 12,
+      "expected": 12,
+      "gpu_peak_mib": 11236,
+      "finish": "stop",
+      "request_seconds": 275.97
+    },
+    {
+      "config": "RK8V4 159K sequential",
+      "matched": 16,
+      "expected": 16,
+      "gpu_peak_mib": 11224,
+      "finish": "stop",
+      "request_seconds": 477.36
+    },
+    {
+      "config": "RK4V4 232K sequential",
+      "matched": 24,
+      "expected": 24,
+      "gpu_peak_mib": 11230,
+      "finish": "length",
+      "request_seconds": 962.04
+    }
+  ],
+  "long_context_pins_note": "232K random-order stress is deliberately not used as a release metric: stored runs differed materially across repeats and the misses were common across KV formats. The 232K row above is the sequential fixture.",
+  "p1_190k": [
+    {
+      "arm": "p0_rk4v4_daily",
+      "dtype": "rk4v4",
+      "pool": 39168,
+      "retrieve": 6144,
+      "gdn_fp16": false,
+      "prompt_tokens": 189954,
+      "completion_tokens": 328,
+      "seconds": 387.3,
+      "finish": "stop",
+      "semantic_pass": 24,
+      "n": 24,
+      "json_ok": true
+    },
+    {
+      "arm": "p0_nvfp4_gdn32",
+      "dtype": "nvfp4",
+      "pool": 38528,
+      "retrieve": 5504,
+      "gdn_fp16": false,
+      "prompt_tokens": 189954,
+      "completion_tokens": 303,
+      "seconds": 346.1,
+      "finish": "stop",
+      "semantic_pass": 24,
+      "n": 24,
+      "json_ok": true
+    },
+    {
+      "arm": "long_rk8v4",
+      "dtype": "rk8v4",
+      "pool": 26624,
+      "retrieve": 5120,
+      "gdn_fp16": false,
+      "prompt_tokens": 189954,
+      "completion_tokens": 325,
+      "seconds": 356.9,
+      "finish": "stop",
+      "semantic_pass": 24,
+      "n": 24,
+      "json_ok": true
+    }
+  ],
+  "p1_note": "One 189,954-token real-content fixture with 24 JSON questions; 16 code facts and 8 earlier conversation facts.",
+  "p0_regression": [
+    {
+      "arm": "p0_rk4v4_daily",
+      "pass": 20,
+      "n": 22,
+      "tool_pass": 9,
+      "tool_n": 10
+    },
+    {
+      "arm": "p0_v100_baseline",
+      "pass": 20,
+      "n": 22,
+      "tool_pass": 9,
+      "tool_n": 10
+    }
+  ],
+  "p0_arith_thinking_off": [
+    {
+      "arm": "p0_rk4v4_daily",
+      "pass": 12,
+      "exact": 12,
+      "n": 30
+    },
+    {
+      "arm": "p0_v100_baseline",
+      "pass": 18,
+      "exact": 12,
+      "n": 30
+    }
+  ],
+  "p0_arith_xhigh": [
+    {
+      "arm": "p0_rk4v4_daily",
+      "pass": 4,
+      "exact": 4,
+      "n": 4
+    },
+    {
+      "arm": "p0_rk4v4_gdn16",
+      "pass": 4,
+      "exact": 4,
+      "n": 4
+    },
+    {
+      "arm": "p0_nvfp4_gdn32",
+      "pass": 4,
+      "exact": 4,
+      "n": 4
+    },
+    {
+      "arm": "p0_v100_baseline",
+      "pass": 4,
+      "exact": 4,
+      "n": 4
+    }
+  ],
+  "vram_peak_mib": [
+    {
+      "config": "NVFP4 + GDN16 (previous daily)",
+      "pool": 39168,
+      "peak": 11168
+    },
+    {
+      "config": "RK4V4 + GDN16",
+      "pool": 39168,
+      "peak": 11148
+    },
+    {
+      "config": "NVFP4 + GDN32",
+      "pool": 38528,
+      "peak": 11226
+    },
+    {
+      "config": "RK4V4 + GDN32 (new daily)",
+      "pool": 39168,
+      "peak_low": 11220,
+      "peak_high": 11236
+    }
+  ],
+  "vram_note": "Whole-GPU peak sampled by nvidia-smi; +52..+68 MiB versus previous daily, within the +100 MiB constraint. Runtime headroom is about 12 MiB on the maintainer machine; the public example keeps 36864/3840.",
+  "boundaries": [
+    "Not a unified benchmark: tests used different binaries and fixtures.",
+    "232K random-order stress is omitted from release claims.",
+    "thinking-off arithmetic differs; the daily xhigh path passed 4/4.",
+    "Only the maintainer RTX 5070 Ti Laptop 12GB / 32GB RAM was tested."
+  ]
+}

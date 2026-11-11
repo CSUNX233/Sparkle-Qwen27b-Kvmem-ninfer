@@ -5,8 +5,8 @@
 1. **优先开启混合显卡模式（Hybrid / Optimus）**，让桌面、浏览器尽量使用核显，按设备要求重启。没有核显则跳过。
 2. **对实际引擎关闭驱动溢出内存**：NVIDIA 控制面板 → 管理 3D 设置 → 程序设置 → 添加 `runtime/engine/ninfer-serve.exe` → `CUDA - Sysmem Fallback Policy` → `Prefer No Sysmem Fallback`。引擎重启后生效，保留全局设置。**保留 KVMem 的 Host KV**，它与驱动自动溢出不同。
 3. **关闭无关后台应用**，退出游戏、其他模型、占用独显的视频处理等，再查看任务管理器与 `nvidia-smi`。驱动显示的空闲显存不等于 CUDA 能完整分配的额度。
-4. **仍不足，优先换 RK4V4**：停止后运行 `07-kv-rk4v4.cmd`，再用 `02-start.cmd` 启动。回退用 `07-kv-nvfp4.cmd`。同一引擎支持两者，缓存重建，输出也可能变化。
-5. **再不足，配套缩小页池与检索窗口**：停止后运行 `08-pool-small.cmd`，设置 DeviceKV=34560、RetrieveTokens=1536；保留 sink=12288、recent=19456、HostKV=7168MiB。用 `08-pool-default.cmd` 恢复 36864/3840。小档可能降低历史召回，尚未追加实模长任务验收；不要只缩页池而保留装不下的窗口。
+4. **确认 KV 格式**：v1.1.0 默认已经是 RK4V4 + GDN FP32，同池比 NVFP4 少约 20 MiB。不要为了省显存切到 NVFP4；如需诊断可按 [安装说明](INSTALL.md#kv-格式切换默认-rk4v4) 显式切换。
+5. **仍不足，配套缩小页池与检索窗口**：停止后运行 `08-pool-small.cmd`，设置 DeviceKV=34560、RetrieveTokens=1536；保留 sink=12288、recent=19456、HostKV=7168MiB。用 `08-pool-default.cmd` 恢复 36864/3840。小档可能降低历史召回，尚未追加实模长任务验收；不要只缩页池而保留装不下的窗口。
 
 每次只改一项，记录实际引擎哈希、模型、配置和错误，完成启动、短任务、缓存及工具续接检查后再试长任务。显存不足不应通过降低思考、删除历史或强制结束来掩盖。
 
