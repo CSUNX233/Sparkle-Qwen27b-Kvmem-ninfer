@@ -21,11 +21,15 @@ NInfer inference · KVMem tiered KV · MTP3 speculative decoding · dsh Agent wo
 
 | Question | Answer |
 |---|---|
-| **What is this?** | A local Agent stack for coding, files and web tasks: NInfer engine + KVMem long history + MTP3 + optional dsh web UI. |
+| **What is this?** | A local Agent stack for coding, files and web tasks: NInfer engine + KVMem long history + MTP3 + optional dsh web UI / Pmod desktop. |
 | **Where does it run?** | Directly validated on **RTX 5070 Ti Laptop 12GB / i7-14650HX / 32GB RAM / Windows**. Other 12GB+ GPUs need architecture-matched builds. |
 | **Defaults?** | Qwen3.8-27B GSQ-RCO IQ3_XXS + MTP3, **RK4V4 + GDN FP32**, DeviceKV 36864 / Retrieve 3840 / HostKV 7168 MiB, xhigh. |
 | **v1.1.0 focus?** | Predecessor-page retrieval fix, malformed tool-envelope fix, RK4V4/GDN FP32 daily default, dsh state card. |
 | **What it is not?** | Proof that every task beats cloud models. A multi-image + compaction `scatter` failure remains documented. |
+
+> **Desktop:** the repository also contains the **Pmod** GUI in [`desktop/`](desktop/) (Tauri 2 + Vue 3.5): chat, model configuration, VRAM monitoring and an OpenAI-compatible gateway. The installer build script is [`scripts/build-inno-installer.ps1`](scripts/build-inno-installer.ps1). It is an optional frontend and does not change the engine or default Agent.
+
+![Pmod desktop](docs/images/02-chat.png)
 
 ## v1.1.0 update
 
