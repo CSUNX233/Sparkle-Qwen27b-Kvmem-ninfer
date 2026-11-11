@@ -21,11 +21,15 @@ NInfer 推理 · KVMem 分层 KV · MTP3 推测解码 · dsh Agent 工作台
 
 | 问题 | 回答 |
 |---|---|
-| **这是什么？** | 一个面向本地代码/文件/网页任务的 27B Agent 运行栈：NInfer 引擎 + KVMem 长历史 + MTP3 + 可选 dsh 网页界面。 |
+| **这是什么？** | 一个面向本地代码/文件/网页任务的 27B Agent 运行栈：NInfer 引擎 + KVMem 长历史 + MTP3 + dsh 网页 / Pmod 桌面界面。 |
 | **跑在哪？** | 维护者直接验证 **RTX 5070 Ti Laptop 12GB / i7-14650HX / 32GB RAM / Windows**；其他 12GB+ 显卡需要匹配架构的构建。 |
 | **默认配置？** | Qwen3.8-27B GSQ-RCO IQ3_XXS + MTP3，**RK4V4 + GDN FP32**，DeviceKV 36864 / Retrieve 3840 / HostKV 7168 MiB，xhigh。 |
 | **v1.1.0 的重点？** | 检索前邻页补齐、畸形工具外壳修复、RK4V4/GDN FP32 日常切换、dsh 状态卡。 |
 | **不适合什么？** | 不能把它当成“所有任务全面超过云端模型”的证明；多图 + compaction 仍有一个已记录的 `scatter` 失败。 |
+
+> **桌面端：** 仓库同时包含 [`desktop/`](desktop/) 的 **Pmod** 图形工作台（Tauri 2 + Vue 3.5），提供对话、模型配置、显存监控和 OpenAI 兼容网关；安装包构建脚本在 [`scripts/build-inno-installer.ps1`](scripts/build-inno-installer.ps1)。这是可选前端，不改变引擎和默认 Agent。
+
+![Pmod 桌面端](docs/images/02-chat.png)
 
 ## v1.1.0 更新
 
