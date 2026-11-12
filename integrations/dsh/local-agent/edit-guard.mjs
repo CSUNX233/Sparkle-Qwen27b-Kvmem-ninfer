@@ -20,6 +20,7 @@ const newPattern = /新建|创建|new file|create (?:a )?new file|write (?:a )?n
 const switchPattern = /切换|switch to|now use|改用|换成/i;
 const renamePattern = /重命名|rename|移动目录|move (?:the )?directory/i;
 const readPattern = /读取|打开|查看|\bread\b|inspect|check/i;
+const explicitReadOnlyPattern = /只读|(?:只|仅)(?:需|要|需要)?(?:读取|阅读|查看|打开)|不要(?:修改|编辑|写入|更改)(?:任何)?文件|do not (?:modify|edit|write) (?:any )?files|read[- ]only|only (?:read|inspect|view)/i;
 const quotedPattern = /'([^'\r\n]{1,400})'|"([^"\r\n]{1,400})"|`([^`\r\n]{1,400})`|“([^”\r\n]{1,400})”|‘([^’\r\n]{1,400})’/g;
 const pathPattern = /(?:file:\/\/\/|[A-Za-z]:[\\/])[^\s"'`<>|;,)\]}，。；：、！？（）【】《》“”‘’]+/g;
 
@@ -313,9 +314,12 @@ export function checkCall({ exec, pending, cwd, events = [] }) {
     return null;
   }
   if (pending.kind === 'read' || pending.kind === 'switch') {
+    // An incidental "view" or "open" can describe a feature of a creation task.
+    // Block writes only when the user explicitly restricted the task to reading.
+    if (!explicitReadOnlyPattern.test(pending.text ?? '')) return null;
     if (exec.name === 'edit' || exec.name === 'write') {
-      return feedback({ ...pending, old: '', new: '' },
-        'the latest user request is to read or switch, not to modify files.');
+      return 'Execution check: the latest user request is to read or switch, not to modify files. ' +
+        'The tool was not run and no arguments were rewritten. Follow the explicit read-only request.';
     }
     return null;
   }

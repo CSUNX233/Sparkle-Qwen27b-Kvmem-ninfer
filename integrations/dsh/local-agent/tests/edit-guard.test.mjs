@@ -18,6 +18,24 @@ const WHOLE = 'const state = { score: 0, lives: 3 };\nconst RESET_KEY = "r";\nfu
 const WHOLE_NEW = 'const state = { score: 0, lives: 5 };\nconst RESET_KEY = "r";\nfunction resetGame() { state.score = 0; state.lives = 5; }';
 const textOf = result => result.content.filter(b => b.type === 'text').map(b => b.text).join('\n');
 
+test('a creation request containing an in-game view action permits file creation', () => {
+  const events = [{ type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text',
+    text: '请制作一个交互页面，点击按钮查看帮助，交付完整项目。' }] } }];
+  const pending = editGuard.derivePending(events);
+  assert.equal(pending.kind, 'read');
+  assert.equal(editGuard.checkCall({ pending, cwd: 'D:\\example', events,
+    exec: { name: 'write', arguments: { file_path: 'D:/example/town/index.html', content: 'fixture' } } }), null);
+});
+
+test('an explicit read-only request still blocks a write', () => {
+  const events = [{ type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text',
+    text: '只读取 D:/example/a.txt，不要修改文件。' }] } }];
+  const pending = editGuard.derivePending(events);
+  assert.equal(pending.kind, 'read');
+  assert.match(editGuard.checkCall({ pending, cwd: 'D:\\example', events,
+    exec: { name: 'write', arguments: { file_path: 'D:/example/a.txt', content: 'fixture' } } }), /not to modify/);
+});
+
 function readEnvelope(file, source) {
   const lines = source.replace(/\n$/, '').split('\n').map((line, i) => `${i + 1}: ${line}`).join('\n');
   return `<path>${file}</path>\n<type>file</type>\n<content>\n${lines}\n\n(End of file - total ${source.replace(/\n$/, '').split('\n').length} lines)\n</content>`;
@@ -179,4 +197,14 @@ test('runtime: a new-file request allows write to the new path', async t => {
   const result = await f.run('write', { file_path: created, content: 'RESET=R' });
   assert.equal(result.isError, false);
   assert.equal(await readFile(created, 'utf8'), 'RESET=R');
+});
+
+test('runtime: a creation request with an in-game view action can write its project', async t => {
+  const f = await fixture(t);
+  const created = path.join(f.dir, 'town.html');
+  f.events.push({ type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text',
+    text: '请制作一个交互页面，点击按钮查看帮助，交付完整项目。' }] } });
+  const result = await f.run('write', { file_path: created, content: 'fixture' });
+  assert.equal(result.isError, false);
+  assert.equal(await readFile(created, 'utf8'), 'fixture');
 });

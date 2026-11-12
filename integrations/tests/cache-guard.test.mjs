@@ -29,6 +29,7 @@ test('guard propagates cancellation and preserves completed responses', async t 
       res.writeHead(200, { 'content-type': 'text/event-stream', 'x-fixture': 'preserved' });
       res.write('data: {"fixture":1}\n\n');
       if (state.mode === 'stream') return;
+      if (state.mode === 'slow') { setTimeout(() => res.end('data: [DONE]\n\n'), 6200); return; }
       if (state.mode === 'after-error') { setImmediate(() => res.destroy()); return; }
       res.end('data: [DONE]\n\n');
     });
@@ -93,6 +94,18 @@ test('guard propagates cancellation and preserves completed responses', async t 
       assert.equal(state.body, body);
       assert.deepEqual(await deadline(state.closed.promise), { complete: true });
     }
+  });
+  await t.test('an active stream survives an idle pause beyond HTTP keep-alive time', async () => {
+    const { path, state } = fixture('slow'); const done = deferred();
+    send(path, response => {
+      let text = '';
+      response.setEncoding('utf8'); response.on('data', chunk => { text += chunk; });
+      response.on('end', () => done.resolve({ text, status: response.statusCode }));
+      response.on('error', error => done.reject(error));
+    });
+    assert.deepEqual(await deadline(done.promise, 10000), { text: 'data: {"fixture":1}\n\ndata: [DONE]\n\n', status: 200 });
+    assert.deepEqual(await deadline(state.closed.promise), { complete: true });
+    assert.equal(server.listening, true);
   });
   await t.test('upstream failure before headers produces 502', async () => {
     const { path } = fixture('before-error'); const done = deferred();
