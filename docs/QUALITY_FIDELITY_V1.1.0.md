@@ -87,14 +87,14 @@
 
 ## 3. dsh 状态卡（v1.1.0）
 
-`integrations/dsh/local-agent/state-card.mjs` v0.1.2 在显著工具结果后追加确定性 `local-state-card` 消息：目标、当前文件、最近尝试、最后成功/错误、代码签名/常量摘要。触发：错误立即、`write`/`edit` 每次、`pwsh`/`bash` 每 3 次；上限 1,900 字符；不修改历史、工具参数、系统提示、采样、KV 或工具 schema。
+`integrations/dsh/local-agent/state-card.mjs` v0.1.3 在显著工具结果后追加确定性 `local-state-card` 消息：目标、当前文件、最近尝试、最后成功/错误、代码签名/常量摘要。触发：错误立即、`write`/`edit` 每次、`pwsh`/`bash` 每 3 次；上限 1,900 字符；不修改历史、工具参数、系统提示、采样、KV 或工具 schema。v0.1.3 修复 `attempts.length % 3` 在 8 条上限后不再触发普通 shell 卡片的问题，改用独立 `shellCalls` 计数器。
 
 本次修复和边界：
 
 - 递归展开嵌套 `tool-result.content`，否则 web/headless 的错误和代码摘要为空。
 - **媒体保护**：会话包含图片后停止注入，避免改变视觉会话的消息/token 边界。只影响新注入，不能修复旧的已压缩会话。
 - 安装器默认把状态卡加入 web profile；`StateCard: false` 或 `LOCAL_STATE_CARD=0` 可关闭。
-- 单测 8/8；5 次多文件重构 A/B 见下表。P0 条件同时临时放宽了 pruner，状态卡不是唯一变量；pruner 放宽和 bridge **未并入**日常。
+- 单测 10/10（含 9 次 shell 的 `apply` 集成用例）；5 次多文件重构 A/B 见下表。P0 条件同时临时放宽了 pruner，状态卡不是唯一变量；pruner 放宽和 bridge **未并入**日常。
 
 | 运行 | 步数 | 工具调用 | 重复 | 上下文 | 输出 token | 耗时 s | 测试 |
 |---|---:|---:|---:|---:|---:|---:|---|

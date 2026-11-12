@@ -6,6 +6,7 @@ All files here are derived from the maintainer's local measurements on 2026-11-0
 - `engine-tool-envelope.json` - malformed tool-call envelope fix.
 - `rk4v4-gdn32.json` - RK4V4/GDN FP32 fidelity, long pins, 190K, regression and VRAM.
 - `state-card-5x.json` - five-run multi-file refactor A/B.
+- `state-card-trigger-ab.json` - one state-card-only on/off pair and the post-cap caveat.
 - `pruner-fixture.json` - deterministic pruner fixture plus model-level caveats.
 
 The patches in `benchmarks/qualification/` are the source of record for the two engine changes. See `docs/QUALITY_FIDELITY_V1.1.0.md` for interpretation and limitations.

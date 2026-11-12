@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  digestCode, digestError, summarizeArgs, buildStateCard, shouldEmit, collectText, hasImageBlock,
+  digestCode, digestError, summarizeArgs, buildStateCard, shouldEmit, collectText, hasImageBlock, apply,
 } from '../state-card.mjs';
 
 const sample = `import os
@@ -72,10 +72,46 @@ test('buildStateCard is bounded and contains state', () => {
 });
 
 test('shouldEmit reacts to errors, writes and periodic shell calls', () => {
-  const state = { attempts: [{}, {}, {}] };
+  const state = { attempts: [{}, {}, {}], shellCalls: 3 };
   assert.equal(shouldEmit('pwsh', state, { error: true }), true);
   assert.equal(shouldEmit('write', state, { error: false }), true);
   assert.equal(shouldEmit('pwsh', state, { error: false }), true);
-  assert.equal(shouldEmit('pwsh', { attempts: [{}] }, { error: false }), false);
-  assert.equal(shouldEmit('read', { attempts: [{}] }, { error: false }), false);
+  assert.equal(shouldEmit('pwsh', { attempts: [{}], shellCalls: 1 }, { error: false }), false);
+  assert.equal(shouldEmit('read', { attempts: [{}], shellCalls: 1 }, { error: false }), false);
+});
+
+test('shell trigger survives the capped attempts list', () => {
+  const capped = { attempts: Array.from({ length: 8 }, () => ({})), shellCalls: 9 };
+  assert.equal(shouldEmit('pwsh', capped, { error: false }), true);
+  assert.equal(shouldEmit('pwsh', { ...capped, shellCalls: 10 }, { error: false }), false);
+  assert.equal(shouldEmit('pwsh', { ...capped, shellCalls: 12 }, { error: false }), true);
+  assert.equal(shouldEmit('bash', { ...capped, shellCalls: 15 }, { error: false }), true);
+});
+
+test('apply keeps emitting shell cards after attempts fills', async () => {
+  delete process.env.LOCAL_STATE_CARD;
+  const hooks = new Map();
+  apply({ on: (name, handler) => hooks.set(name, handler), get: () => null });
+  const hook = hooks.get('tools/post-execute');
+  assert.ok(hook);
+  const agent = {
+    session: { header: { agentPreset: 'ninfer-local' }, snapshotEvents: () => [] },
+    options: { provider: 'ninfer-local' },
+  };
+  const next = async () => ({ content: [{ type: 'text', text: 'ok' }] });
+  let cards = 0;
+  for (let i = 1; i <= 9; i += 1) {
+    const exec = {
+      name: 'pwsh',
+      arguments: JSON.stringify({ command: `echo ${i}` }),
+      agent,
+      signal: { aborted: false },
+    };
+    const result = { content: [{ type: 'text', text: 'ok' }], isError: false };
+    const downstream = await hook(exec, result, next);
+    cards += (downstream.additionalContexts ?? []).length;
+  }
+  // Calls 3, 6 and 9 must each add a card; call 9 is after attempts has
+  // already been capped at 8 entries.
+  assert.equal(cards, 3);
 });

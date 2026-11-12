@@ -92,7 +92,7 @@ function latestUserGoal(agent) {
 function stateFor(agent) {
   let state = states.get(agent);
   if (!state) {
-    state = { goal: latestUserGoal(agent), files: [], attempts: [], lastOk: '', lastErr: '', lastCard: '' };
+    state = { goal: latestUserGoal(agent), files: [], attempts: [], shellCalls: 0, lastOk: '', lastErr: '', lastCard: '' };
     states.set(agent, state);
   }
   return state;
@@ -131,7 +131,11 @@ export function buildStateCard(state) {
 export function shouldEmit(toolName, state, entry) {
   if (entry.error) return true;
   if (toolName === 'write' || toolName === 'edit') return true;
-  if (toolName === 'pwsh' || toolName === 'bash') return state.attempts.length % 3 === 0;
+  if (toolName === 'pwsh' || toolName === 'bash') {
+    // attempts is capped at MAX_ATTEMPTS, so its length would stick at 8 and
+    // stop triggering after the list fills. Count shell calls separately.
+    return state.shellCalls > 0 && state.shellCalls % 3 === 0;
+  }
   return false;
 }
 
@@ -186,6 +190,9 @@ export function apply(ctx) {
       /\bTraceback\b|\bSyntaxError\b|\bTypeError\b|\bValueError\b|\bRuntimeError\b|\bNameError\b|\bImportError\b|\bUnexpected token\b|\bcommand not found\b|\bPermission denied\b|\bNO TESTS RAN\b/i.test(output);
     const digest = error ? digestError(output, true) : [];
     const state = stateFor(agent);
+    if (toolName === 'pwsh' || toolName === 'bash') {
+      state.shellCalls = (state.shellCalls ?? 0) + 1;
+    }
     const summary = summarizeArgs(toolName, args);
     const entry = {
       tool: toolName,

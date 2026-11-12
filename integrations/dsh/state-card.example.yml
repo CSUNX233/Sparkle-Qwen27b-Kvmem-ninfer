@@ -7,4 +7,4 @@
 # starting dsh. The card is skipped in plan mode and in sessions containing images.
 - insert:
     - id: state-card
-      name: 'file:///D:/path/to/ninfer/integrations/dsh/local-agent/state-card.mjs?v=0.1.2'
+      name: 'file:///D:/path/to/ninfer/integrations/dsh/local-agent/state-card.mjs?v=0.1.3'

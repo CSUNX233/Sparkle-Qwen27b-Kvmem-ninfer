@@ -1,0 +1,41 @@
+{
+  "generated": "2026-11-12",
+  "fixture": "same multi-file refactor fixture, one run per condition, state-card only (no pruner changes)",
+  "engine_sha256": "8b2c195e32e3b58a3584b284679c990a07986691967f1b939b0fe31351559012",
+  "runs": [
+    {
+      "condition": "baseline",
+      "steps": 19,
+      "tool_calls": 25,
+      "tool_errors": 0,
+      "duplicate_calls": 0,
+      "state_cards": 0,
+      "context_tokens": 28343,
+      "output_tokens": 13772,
+      "elapsed_s": 206.7,
+      "verify_ok": true,
+      "pwsh_calls": 10,
+      "write_edit_calls": 5
+    },
+    {
+      "condition": "state",
+      "steps": 18,
+      "tool_calls": 28,
+      "tool_errors": 1,
+      "duplicate_calls": 2,
+      "state_cards": 7,
+      "context_tokens": 67034,
+      "output_tokens": 21032,
+      "elapsed_s": 350.4,
+      "verify_ok": true,
+      "pwsh_calls": 7,
+      "write_edit_calls": 5
+    }
+  ],
+  "interpretation": [
+    "Both runs passed all 13 unittest tests.",
+    "The state condition had 7 pwsh calls, below the 8-entry attempts cap, so this pair does not exercise the post-cap trigger bug.",
+    "A deterministic apply test with 9 shell calls emits cards at 3/6/9; the old implementation emits only at 3/6.",
+    "n=1 and divergent trajectories: no performance or quality conclusion."
+  ]
+}
