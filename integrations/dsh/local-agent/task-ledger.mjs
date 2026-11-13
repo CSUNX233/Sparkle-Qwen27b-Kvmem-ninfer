@@ -142,6 +142,11 @@ export function apply(ctx) {
     const plan = ctx.sessionProjections.stateOf(session, 'plan');
     if (plan?.active || plan?.wanted === true) return;
     const events = session.snapshotEvents?.() ?? [];
+    // A tool may deliberately conclude a turn (for example after repeated
+    // malformed calls). Do not restart it with a ledger reminder.
+    const lastAssistant = events.findLast(event => event.type === 'assistant/message')?.data;
+    if (!lastAssistant || lastAssistant.interrupted ||
+        (lastAssistant.message?.content ?? []).some(block => block.type === 'tool-call')) return;
     const user = latestUser(events);
     if (!user) return;
     const actions = parseLedger(user.text);

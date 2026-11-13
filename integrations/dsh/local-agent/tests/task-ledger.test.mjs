@@ -62,3 +62,18 @@ test('failed results and unrelated edits do not complete an action', () => {
   ];
   assert.deepEqual(ledger.completedActions(actions, [...base, ...failed], 'D:/p'), [false, false, false]);
 });
+
+test('tool-concluded turns do not cause the ledger to resume work', () => {
+  let handler;
+  const ctx = { on: (_, fn) => { handler = fn; }, sessionProjections: { stateOf: () => null } };
+  ledger.apply(ctx);
+  const events = [{ type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: complex }] } },
+    { type: 'assistant/message', data: { message: { content: [{ type: 'tool-call', name: 'malformed_tool_call' }] } } }];
+  let injections = 0;
+  const agent = { options: { provider: 'ninfer-local' }, session: { header: { agentPreset: 'ninfer-local' }, snapshotEvents: () => events }, inject: () => { injections++; } };
+  handler({ agent, turn: 1, signal: new AbortController().signal });
+  assert.equal(injections, 0);
+  events.push({ type: 'assistant/message', data: { message: { content: [{ type: 'text', text: 'finished' }] } } });
+  handler({ agent, turn: 1, signal: new AbortController().signal });
+  assert.equal(injections, 1);
+});

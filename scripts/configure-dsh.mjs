@@ -130,6 +130,7 @@ const entries = [
     { id: 'todo-completion', name: moduleURL('local-agent/todo-completion.mjs') },
     { id: 'tool-grounded-execution', name: moduleURL('local-agent/tool-grounded-execution.mjs'),
       disabled: cfg.ToolGroundedExecution === false },
+    { id: 'tool-call-recovery', name: moduleURL('local-agent/tool-call-recovery.mjs') },
     { id: 'state-card', name: moduleURL('local-agent/state-card.mjs'),
       disabled: cfg.StateCard === false },
     { id: 'edit-guard', name: moduleURL('local-agent/edit-guard.mjs'),
@@ -147,7 +148,7 @@ const entries = [
 // Preserve unrelated user patch entries; replace only entries owned by this installer.
 const patchFile = path.join(profile, 'cordis.patch.yml');
 const previous = document(patchFile, []);
-const owned = new Set(['web', 'web-search-deepseek', 'web-fetch-http', 'ui-trajectory', 'ui-model-selection', 'web-local', 'todo-completion', 'tool-grounded-execution', 'state-card', 'edit-guard', 'task-ledger', 'mcp-browser']);
+const owned = new Set(['web', 'web-search-deepseek', 'web-fetch-http', 'ui-trajectory', 'ui-model-selection', 'web-local', 'todo-completion', 'tool-grounded-execution', 'tool-call-recovery', 'state-card', 'edit-guard', 'task-ledger', 'mcp-browser']);
 const keep = previous.flatMap(entry => {
   if (owned.has(entry.id)) return [];
   if (entry.insert) { const insert = entry.insert.filter(row => !owned.has(row.id)); return insert.length ? [{ ...entry, insert }] : []; }

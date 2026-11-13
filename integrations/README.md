@@ -45,17 +45,25 @@ node --test integrations/tests/tool-grounded-execution.test.mjs
 
 `local-agent/task-ledger.mjs` 解析最新用户指令里的 move/edit/write 动作，从成功工具结果标记完成项；在 `agent/turn-stopping` 时如果还有未完成动作，注入一条结构化“剩余动作”提醒。它不执行工具、不改写参数、不自动补写文件；plan mode 下不介入。
 
+工具主动结束回合时，账本不注入续作提醒，避免重新启动本应暂停的任务。
+
 两者都不额外发起模型请求、不分配 GPU buffer；解析是启发式的，可能误拦或误判，deny 会给出精确证据供模型/用户纠正。真实 dsh 交互仍需单独验收。
 
 ```powershell
 node --test integrations/dsh/local-agent/tests/*.test.mjs
 ```
 
-本轮仓库内 24/24 通过（edit-guard 10、task-ledger 4、state-card 10）。停用：从网页 profile 删除对应 `id: edit-guard` / `id: task-ledger` 项并重载；升级引擎的查询开关在启动前清除 `NINFER_KVMEM_QUERY_MODE`、`NINFER_KVMEM_SUFFIX_REFRESH`、`NINFER_KVMEM_QUERY_ASSEMBLE` 并重启。
+此前仓库记录的验收为 24/24（edit-guard 10、task-ledger 4、state-card 10）。停用：从网页 profile 删除对应 `id: edit-guard` / `id: task-ledger` 项并重载；升级引擎的查询开关在启动前清除 `NINFER_KVMEM_QUERY_MODE`、`NINFER_KVMEM_SUFFIX_REFRESH`、`NINFER_KVMEM_QUERY_ASSEMBLE` 并重启。
+
+## 畸形工具调用恢复
+
+`local-agent/tool-call-recovery.mjs` 处理本地引擎返回的 `malformed_tool_call` 保留错误标记。它不将该标记注册进模型可用工具，不自动执行或补全缺失参数；dsh 返回明确的失败原因和重试提示。当前回合连续出现四次该标记时，使用 dsh 的取消接口中止当前回合并提示任务未完成，保留已排队消息。dsh 不会自动唤醒之前已排队的消息，用户可再发送“继续”唤醒；普通工具调用或新的用户回合会重置连续计数。状态卡不再将此错误标记当作一次真实工具操作。由 `scripts/configure-dsh.mjs` 加入 web profile；手动安装时加入 `id: tool-call-recovery`，移除该条可停用。
+
+这是针对解析错误反馈和同类连续失败的保护，不保证模型不会生成畸形调用，也不覆盖任意其他失败、所有长任务或直连引擎 API 的客户端。插件不更改模型、采样、GPU 页池或工具参数；真实重试仍需推理。
 
 ## 确定性状态卡（v1.1.0 / 触发修复 v0.1.3）
 
-`local-agent/state-card.mjs` 在显著工具结果后追加一条 `source.plugin = local-state-card` 的确定性用户消息，内容为目标、当前文件、最近尝试、最后成功/错误、代码签名与常量摘要。触发条件：工具错误立即；`write`/`edit` 每次；`pwsh`/`bash` 每 3 次。**v0.1.3 修复**：原实现用 `attempts.length % 3` 判断，而 `attempts` 最多保留 8 条，存满后长度恒为 8，普通 shell 调用不再触发；现在使用独立 `shellCalls` 计数器（不受 8 条上限影响）。相同内容去重，单卡上限 1900 字符。它不修改历史、工具参数、系统提示、采样、KV 或工具 schema，也不执行工具或额外发起模型请求。
+`local-agent/state-card.mjs` 在显著工具结果后追加一条 `source.plugin = local-state-card` 的确定性用户消息，内容为目标、当前文件、最近尝试、最后成功/错误、代码签名与常量摘要。当前实现会在 `write`/`edit`、每 3 次 `pwsh`/`bash` 后触发；错误摘要会记入状态，但由于触发判断使用的 `entry.error` 与实际记录的 `entry.ok` 字段不一致，不能保证每次错误立即触发。此处暂不增加额外消息，以免改变长任务的注入频率。**v0.1.3 修复**：原实现用 `attempts.length % 3` 判断，而 `attempts` 最多保留 8 条，存满后长度恒为 8，普通 shell 调用不再触发；现在使用独立 `shellCalls` 计数器（不受 8 条上限影响）。相同内容去重，单卡上限 1900 字符。它不修改历史、工具参数、系统提示、采样、KV 或工具 schema，也不执行工具或额外发起模型请求。
 
 - **嵌套结果**：递归展开 web/headless 的 `tool-result.content`，否则错误与代码摘要会得到空文本。
 - **媒体保护**：会话一旦包含图片（用户消息或工具结果中的 image block），停止注入状态卡，避免在视觉会话里改变消息/token 边界。该保护只影响新注入，不能修复已经压缩或已包含状态卡的旧会话。

@@ -115,3 +115,19 @@ test('apply keeps emitting shell cards after attempts fills', async () => {
   // already been capped at 8 entries.
   assert.equal(cards, 3);
 });
+
+test('malformed parser markers are not recorded as tool attempts', async () => {
+  const hooks = new Map();
+  apply({ on: (name, handler) => hooks.set(name, handler), get: () => null });
+  const hook = hooks.get('tools/post-execute');
+  const agent = { session: { header: { agentPreset: 'ninfer-local' }, snapshotEvents: () => [] }, options: { provider: 'ninfer-local' } };
+  const next = async () => ({ kind: 'accept', content: [{ type: 'text', text: 'ok' }] });
+  const marker = await hook({ name: 'malformed_tool_call', arguments: {}, agent, signal: { aborted: false } },
+    { content: [{ type: 'text', text: 'format error' }], isError: true }, next);
+  assert.equal(marker.additionalContexts, undefined);
+  let out;
+  for (let i = 0; i < 3; i++) out = await hook({ name: 'pwsh', arguments: { command: `echo ${i}` }, agent, signal: { aborted: false } },
+    { content: [{ type: 'text', text: 'ok' }], isError: false }, next);
+  assert.equal(out.additionalContexts.length, 1);
+  assert.doesNotMatch(JSON.stringify(out.additionalContexts), /malformed_tool_call/);
+});

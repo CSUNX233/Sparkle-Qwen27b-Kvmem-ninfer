@@ -179,6 +179,8 @@ export function apply(ctx) {
     const downstream = await next();
     const agent = exec.agent;
     if (!agent || exec.signal?.aborted || !isLocalAgent(agent)) return downstream;
+    // The parser's error carrier is not an executed tool or a code attempt.
+    if (exec.name === 'malformed_tool_call') return downstream;
     const projections = ctx.get('sessionProjections');
     const plan = projections?.stateOf?.(agent.session, 'plan');
     if (plan?.active || plan?.wanted === true) return downstream;
