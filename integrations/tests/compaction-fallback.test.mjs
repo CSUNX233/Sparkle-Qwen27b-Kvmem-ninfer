@@ -70,3 +70,54 @@ test('an incomplete local fallback stops the turn instead of starting another st
   await assert.rejects(handlers.get('agent/pre-step')({ agent: {}, signal: new AbortController().signal }, async () => { nextCalls++; }), /incomplete checkpoint/);
   assert.equal(nextCalls, 0);
 });
+
+test('all local pressure failures stop before sending uncompressed history', async () => {
+  for (const message of ['summarization produced no text summary content', 'surface changed during summarization',
+    'summary is not smaller', 'transport failed', 'compaction still above threshold']) {
+    const handlers = new Map();
+    const original = new Error(message);
+    const ctx = { on: (name, handler) => handlers.set(name, handler), logger: { warn() {}, info() {} } };
+    const engine = { ctx, compactIfNeeded: async () => { throw original; }, warnedPressureConfigTargets: new Set() };
+    BasicCompactionEngine.prototype._registerAutomaticCompaction.call(engine);
+    let nextCalls = 0;
+    await assert.rejects(handlers.get('agent/pre-step')({ agent: agent('ninfer-local'), signal: new AbortController().signal },
+      async () => { nextCalls++; }), error => error.code === 'COMPACTION_FAILED' && error.cause === original);
+    assert.equal(nextCalls, 0);
+  }
+});
+
+test('cancellation is propagated instead of continuing the turn', async () => {
+  const handlers = new Map();
+  const controller = new AbortController();
+  const reason = new Error('user stopped');
+  const ctx = { on: (name, handler) => handlers.set(name, handler), logger: { warn() {}, info() {} } };
+  const engine = { ctx, compactIfNeeded: async () => { controller.abort(reason); throw new Error('transport aborted'); }, warnedPressureConfigTargets: new Set() };
+  BasicCompactionEngine.prototype._registerAutomaticCompaction.call(engine);
+  let nextCalls = 0;
+  await assert.rejects(handlers.get('agent/pre-step')({ agent: agent('ninfer-local'), signal: controller.signal },
+    async () => { nextCalls++; }), error => error === reason);
+  assert.equal(nextCalls, 0);
+});
+
+test('other providers retain the existing warning behavior', async () => {
+  const handlers = new Map();
+  const ctx = { on: (name, handler) => handlers.set(name, handler), logger: { warn() {}, info() {} } };
+  const engine = { ctx, compactIfNeeded: async () => { throw new Error('failure'); }, warnedPressureConfigTargets: new Set() };
+  BasicCompactionEngine.prototype._registerAutomaticCompaction.call(engine);
+  let nextCalls = 0;
+  await handlers.get('agent/pre-step')({ agent: agent('remote'), signal: new AbortController().signal }, async () => { nextCalls++; });
+  assert.equal(nextCalls, 1);
+});
+
+test('an already cancelled pre-step neither compacts nor sends a request', async () => {
+  const handlers = new Map();
+  const controller = new AbortController();
+  const reason = new Error('cancel before pre-step');
+  controller.abort(reason);
+  const ctx = { on: (name, handler) => handlers.set(name, handler), logger: { warn() {}, info() {} } };
+  let calls = 0;
+  const engine = { ctx, compactIfNeeded: async () => { calls++; }, warnedPressureConfigTargets: new Set() };
+  BasicCompactionEngine.prototype._registerAutomaticCompaction.call(engine);
+  await assert.rejects(handlers.get('agent/pre-step')({ agent: agent('ninfer-local'), signal: controller.signal }, async () => { calls++; }), error => error === reason);
+  assert.equal(calls, 0);
+});

@@ -17,6 +17,8 @@ NInfer inference · KVMem tiered KV · MTP3 speculative decoding · dsh Agent wo
 
 > **The logical context is 256K, but not every step reads all history.** KVMem keeps cold KV in Host RAM and retrieves pages into GPU memory. This reduces repeated prefill; it is not a completed full-256K validation and does not guarantee that every task is faster.
 
+**Source update, 2026-11-14 (no new Release):** Local automatic-compaction failures now stop the turn while preserving history. State cards batch tool results, emit ordinary checkpoints after eight successful edits/writes, and deduplicate failures; successful reads/shell calls no longer trigger periodic cards. All 28 focused tests pass; the reported long-task failure has not been reproduced on the affected PC. See [scope and limitations](docs/DSH_COMPACTION_CANDIDATE_20261114.md). This updates DSH modules and patches; replacing the engine executable alone does not apply it.
+
 ## At a glance
 
 | Question | Answer |

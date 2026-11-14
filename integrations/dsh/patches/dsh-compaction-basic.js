@@ -889,13 +889,23 @@ var BasicCompactionEngine = class extends CompactionEngine {
 			ctx.logger.info(`compaction (${trigger}): shadowed ${result.shadowedSeqs.length} surface nodes (seqs ${result.shadowedRange.start}-${result.shadowedRange.end}, ~${result.shadowedTokenCount} tokens)`);
 		};
 		ctx.on("agent/pre-step", async ({ agent, signal }, next) => {
-			if (!signal.aborted) try {
+			signal.throwIfAborted();
+			try {
 				const result = await this.compactIfNeeded(agent, "pressure", signal);
 				if (result !== null) logResult(result, "step pressure");
 			} catch (error) {
+				// A cancelled turn must never fall through to a fresh model request.
+				signal.throwIfAborted();
 				if (error?.code === "COMPACTION_INCOMPLETE") {
 					ctx.logger.warn(`step compaction failed: ${error.message}`);
 					throw error;
+				}
+				if (conversationTarget(agent)?.provider === "ninfer-local") {
+					const message = error instanceof Error ? error.message : String(error);
+					const failure = new Error(`Automatic compaction failed: ${message}. The turn is stopped; original session events and any committed checkpoint are preserved.`, { cause: error });
+					failure.code = "COMPACTION_FAILED";
+					ctx.logger.warn(failure.message);
+					throw failure;
 				}
 				if (error instanceof TargetPressureConfigError) {
 					if (this.warnedPressureConfigTargets.has(error.targetKey)) return next();

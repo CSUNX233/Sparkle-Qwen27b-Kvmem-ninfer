@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Deterministic state card + code/error digest for long local-agent turns.
-// It appends compact, machine-readable state after significant tool results.
+// It batches tool evidence into occasional, append-only step checkpoints.
 // It never rewrites history, changes tool arguments, or executes tools.
 import crypto from 'node:crypto';
 import { createUserMessage } from '@deepseek-ai/dsh-llm';
@@ -11,7 +11,8 @@ export const inject = ['sessionProjections'];
 
 const MAX_CARD_CHARS = 1900;
 const MAX_ATTEMPTS = 8;
-const MAX_FILES = 4;
+const MAX_FILES = 8;
+const MUTATIONS_PER_CARD = 8;
 const SIGNATURE_RE = /^\s*(?:async\s+)?(?:def|class|function)\s+[A-Za-z_$][\w$]*|^\s*(?:const|let|var)\s+[A-Za-z_$][\w$]*\s*=|^\s*[A-Z][A-Z0-9_]{2,}\s*=/;
 const ERROR_RE = /\b(?:Traceback|SyntaxError|TypeError|ValueError|RuntimeError|NameError|ImportError|Unexpected token|ERROR|FATAL|failed)\b/i;
 
@@ -92,7 +93,7 @@ function latestUserGoal(agent) {
 function stateFor(agent) {
   let state = states.get(agent);
   if (!state) {
-    state = { goal: latestUserGoal(agent), files: [], attempts: [], shellCalls: 0, lastOk: '', lastErr: '', lastCard: '' };
+    state = { goal: latestUserGoal(agent), files: [], attempts: [], lastOk: '', lastErr: [], lastCard: '', mutations: 0, revision: 0, dirty: false, urgent: false, seenErrors: new Set() };
     states.set(agent, state);
   }
   return state;
@@ -103,40 +104,28 @@ const states = new WeakMap();
 export function buildStateCard(state) {
   const payload = {
     goal: clip(state.goal, 420),
+    successful_mutations: state.revision ?? 0,
     files: state.files.slice(0, MAX_FILES).map(file => ({
       path: clip(file.path, 200),
-      chars: file.chars ?? 0,
-      sig: (file.signatures ?? []).slice(0, 5),
-      const: (file.constants ?? []).slice(0, 4),
-      tail: (file.tail ?? []).slice(-2),
+      scope: clip(file.scope ?? 'recorded fragment; not a full-file snapshot', 80),
     })),
     attempts: state.attempts.slice(-5).map(item => ({
       t: item.tool, a: clip(item.summary, 160), ok: item.ok, err: (item.err ?? []).slice(-2),
     })),
     last_ok: clip(state.lastOk, 260),
-    last_err: (state.lastErr ?? []).slice(-4),
-    note: 'Deterministic state card, not a new user request. Do not repeat a failed command unless the code changed; use this state before re-deriving earlier work.',
+    last_err: (state.lastErr ?? []).slice(-4).map(x => clip(x, 180)),
+    note: 'Tool checkpoint; not a new user request or proof of completion. Files list successful mutations, not verified contents. Do not repeat a failed command without new evidence.',
   };
-  let text = '[state-card v1]\n' + JSON.stringify(payload);
-  if (text.length > MAX_CARD_CHARS) {
-    payload.attempts = payload.attempts.slice(-3);
-    payload.files = payload.files.slice(0, 2);
-    payload.goal = clip(payload.goal, 240);
-    payload.last_ok = clip(payload.last_ok, 160);
-    text = '[state-card v1]\n' + JSON.stringify(payload);
+  const serialize = () => '[state-card v2]\n' + JSON.stringify(payload);
+  // Trim whole fields/items, never cut serialized JSON in the middle.
+  while (serialize().length > MAX_CARD_CHARS && payload.attempts.length) payload.attempts.shift();
+  while (serialize().length > MAX_CARD_CHARS && payload.files.length > 1) payload.files.pop();
+  if (serialize().length > MAX_CARD_CHARS) {
+    payload.goal = clip(payload.goal, 160);
+    payload.last_ok = clip(payload.last_ok, 100);
+    payload.last_err = payload.last_err.slice(-1).map(x => clip(x, 180));
   }
-  return text.length > MAX_CARD_CHARS ? text.slice(0, MAX_CARD_CHARS) : text;
-}
-
-export function shouldEmit(toolName, state, entry) {
-  if (entry.error) return true;
-  if (toolName === 'write' || toolName === 'edit') return true;
-  if (toolName === 'pwsh' || toolName === 'bash') {
-    // attempts is capped at MAX_ATTEMPTS, so its length would stick at 8 and
-    // stop triggering after the list fills. Count shell calls separately.
-    return state.shellCalls > 0 && state.shellCalls % 3 === 0;
-  }
-  return false;
+  return serialize();
 }
 
 export function collectText(content) {
@@ -175,6 +164,34 @@ function resultText(result, downstream) {
 
 export function apply(ctx) {
   if (process.env.LOCAL_STATE_CARD === '0') return;
+  // All tools in one step update one pending checkpoint. A successful edit by
+  // itself does not warrant a synthetic user message. Emit only after eight
+  // mutations, or a new error, once on the next admitted step.
+  ctx.on('agent/pre-step', async ({ agent, signal, messages = [], step }, next) => {
+    const downstream = await next();
+    if (!agent || signal?.aborted || !isLocalAgent(agent) || downstream.kind === 'reject') return downstream;
+    const state = stateFor(agent);
+    if (messages.some(message => message.source?.kind === 'user')) {
+      state.goal = latestUserGoal(agent);
+      const latest = messages.filter(message => message.source?.kind === 'user').at(-1);
+      if (latest) state.goal = textBlocks(latest.content).slice(0, 600);
+      state.attempts = []; state.lastErr = []; state.seenErrors.clear();
+      state.lastCard = '';
+      state.dirty = false; state.urgent = false; state.mutations = 0;
+      return downstream;
+    }
+    if (!state.dirty || (!state.urgent && state.mutations < MUTATIONS_PER_CARD)) return downstream;
+    const plan = ctx.get('sessionProjections')?.stateOf?.(agent.session, 'plan');
+    if (plan?.active || plan?.wanted === true || sessionHasMedia(agent) ||
+        (downstream.messages?.length === 0 && (step === 1 || messages.length > 0))) return downstream;
+    const card = buildStateCard(state);
+    if (card === state.lastCard) return downstream;
+    state.lastCard = card; state.dirty = false; state.urgent = false; state.mutations = 0;
+    return { ...downstream, messages: [...(downstream.messages ?? []), createUserMessage({
+      content: [{ type: 'text', text: card }],
+      source: { kind: 'plugin', plugin: name, form: 'notice', summary: '合并工具检查点' },
+    })] };
+  });
   ctx.on('tools/post-execute', async (exec, result, next) => {
     const downstream = await next();
     const agent = exec.agent;
@@ -188,13 +205,10 @@ export function apply(ctx) {
     const toolName = String(exec.name ?? '');
     const args = parseArgs(exec.arguments);
     const output = resultText(result, downstream);
-    const error = !!result.isError ||
-      /\bTraceback\b|\bSyntaxError\b|\bTypeError\b|\bValueError\b|\bRuntimeError\b|\bNameError\b|\bImportError\b|\bUnexpected token\b|\bcommand not found\b|\bPermission denied\b|\bNO TESTS RAN\b/i.test(output);
+    // Reading source code mentioning TypeError/Traceback is not a failed tool.
+    const error = !!result.isError || downstream.value?.isError === true;
     const digest = error ? digestError(output, true) : [];
     const state = stateFor(agent);
-    if (toolName === 'pwsh' || toolName === 'bash') {
-      state.shellCalls = (state.shellCalls ?? 0) + 1;
-    }
     const summary = summarizeArgs(toolName, args);
     const entry = {
       tool: toolName,
@@ -204,32 +218,22 @@ export function apply(ctx) {
     };
     state.attempts.push(entry);
     if (state.attempts.length > MAX_ATTEMPTS) state.attempts.shift();
-    if (error) state.lastErr = digest;
+    if (error) {
+      state.lastErr = digest;
+      const key = crypto.createHash('sha256').update(JSON.stringify([toolName, args, digest])).digest('hex');
+      if (!state.seenErrors.has(key)) { state.urgent = true; state.dirty = true; }
+      state.seenErrors.add(key);
+      if (state.seenErrors.size > 64) state.seenErrors.delete(state.seenErrors.values().next().value);
+    }
     if (!error && (toolName === 'pwsh' || toolName === 'bash')) {
       state.lastOk = clip(`${summary} -> ${clip(output, 150)}`, 260);
-      state.lastErr = [];
     }
     if (!error && (toolName === 'write' || toolName === 'edit')) {
-      const content = toolName === 'write' ? args.content : args.new_string;
       const filePath = String(args.file_path ?? args.path ?? '');
-      const file = digestCode(content, filePath);
+      const file = { path: filePath, scope: 'successful mutation only; contents not verified' };
       state.files = [file, ...state.files.filter(item => item.path !== file.path)].slice(0, MAX_FILES);
+      state.mutations++; state.revision++; state.dirty = true;
     }
-    if (!shouldEmit(toolName, state, entry)) return downstream;
-    // Media sessions are handled by the engine's vision path. Injecting text
-    // user messages into a history that already contains screenshots can move
-    // message/token boundaries around the vision plan; keep the state card for
-    // text/tool sessions only.
-    if (sessionHasMedia(agent)) return downstream;
-    const card = buildStateCard(state);
-    if (!card || card === state.lastCard) return downstream;
-    state.lastCard = card;
-    return {
-      ...downstream,
-      additionalContexts: [...(downstream.additionalContexts ?? []), createUserMessage({
-        content: [{ type: 'text', text: card }],
-        source: { kind: 'plugin', plugin: name },
-      })],
-    };
+    return downstream;
   });
 }
