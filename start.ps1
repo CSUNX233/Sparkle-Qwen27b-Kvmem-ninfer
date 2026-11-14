@@ -23,6 +23,12 @@ if ($cfg.PSObject.Properties['VisionCPU']) {
     if ($cfg.VisionCPU -isnot [bool]) { throw 'VisionCPU must be a JSON boolean.' }
     $visionCPU = $cfg.VisionCPU
 }
+$visionGPU = $false
+if ($cfg.PSObject.Properties['VisionGPU']) {
+    if ($cfg.VisionGPU -isnot [bool]) { throw 'VisionGPU must be a JSON boolean.' }
+    $visionGPU = $cfg.VisionGPU
+}
+if ($visionCPU -and $visionGPU) { throw 'Choose only one of VisionCPU or VisionGPU.' }
 $engine = Resolve-ProjectPath $cfg.EnginePath
 $model = Resolve-ProjectPath $cfg.ModelPath
 if (-not (Test-Path -LiteralPath $engine) -or -not (Test-Path -LiteralPath $model)) { throw 'Engine/model missing. Run setup.ps1 first.' }
@@ -70,6 +76,7 @@ try {
         '--host-state-slots','8','--auto-long-anchors','--long-anchor-spacing','49152','--max-long-anchors-per-continuation','2',
         '--device-state-slots','0','--no-webui','--log-stats-interval-ms','5000','--host','127.0.0.1','--port',[string]$cfg.EnginePort)
     if ($visionCPU) { $engineArgs += @('--vision-cpu','--vision-max-merged','256') }
+    if ($visionGPU) { $engineArgs += @('--vision','--vision-max-merged','256') }
     $records.Add((Start-OwnedProcess 'engine' $engine $engineArgs $model (Split-Path $engine -Parent)))
     Write-LocalJson (Join-Path $script:RuntimeRoot 'processes.json') @($records.ToArray())
     Write-Host 'Loading model and CUDA graphs ...'

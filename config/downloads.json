@@ -1,15 +1,15 @@
 {
-  "version": "1.1.0",
+  "version": "1.2.0",
   "archives": [
     {
       "id": "engine",
-      "name": "ninfer-5070ti-win-x64-sm120a-v1.1.0.zip",
-      "url": "https://github.com/CSUNX233/Sparkle-Qwen27b-Kvmem-ninfer/releases/download/v1.1.0/ninfer-5070ti-win-x64-sm120a-v1.1.0.zip",
-      "sha256": "daa2a6c5ab0c6a1715d839fcaf3ee4954c6c19d2641f9ee9aec6de083a3bae4a",
+      "name": "ninfer-5070ti-win-x64-sm120a-v1.2.0.zip",
+      "url": "https://github.com/CSUNX233/Sparkle-Qwen27b-Kvmem-ninfer/releases/download/v1.2.0/ninfer-5070ti-win-x64-sm120a-v1.2.0.zip",
+      "sha256": "e45c21e4327cb3020af39c884bf60edec3592aa3045d00d5d942346bdf2afe22",
       "files": [
         {
           "name": "ninfer-serve.exe",
-          "sha256": "8b2c195e32e3b58a3584b284679c990a07986691967f1b939b0fe31351559012"
+          "sha256": "f9a6b29cb7755b18ae02dcc130c17b5e28b2c97530c647db9936680bd5c2ad46"
         }
       ]
     },

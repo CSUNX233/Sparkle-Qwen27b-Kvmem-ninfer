@@ -1,0 +1,13 @@
+{
+  "release": "1.2.0",
+  "engine_sha256": "f9a6b29cb7755b18ae02dcc130c17b5e28b2c97530c647db9936680bd5c2ad46",
+  "previous_engine_sha256": "8b2c195e32e3b58a3584b284679c990a07986691967f1b939b0fe31351559012",
+  "build": {"kind": "incremental", "host_units": 71, "cuda_units": 11, "clean_full_build": false},
+  "vision_boundary": {"prefill_chunk": 128, "old_engine_scatter_error": true, "fixed_engine_success": true, "non_boundary_greedy_tokens_matched": 16, "vision": "CPU"},
+  "sampled_gpu_peak_mib": {"old_boundary_test": 11318, "new_boundary_test": 11320, "installed_short_test": 11326},
+  "long_task": {"approx_input_tokens": 212000, "images_in_recent_history": 2, "baseline_summary_truncated": true, "summary_token_limit": 8192, "completed_game_delivery": false},
+  "compaction_replay": {"input_messages": 64, "tool_definitions": 31, "first_truncation_injected": true, "low_effort_actual_model_prompt_tokens": 135111, "output_tokens": 7667, "required_sections": 8, "isolated_transaction_replayed": true, "token_meter_stubbed": true},
+  "post_compaction": {"retained_images": 2, "reasoning_effort": "xhigh", "strict_tool_round_trip_passed": true, "earlier_attempt_extra_tool_call": true},
+  "hardware": {"tested": "Windows / RTX 5070 Ti Laptop 12GB", "gpu_vision_on_5060ti_16gb_tested": false},
+  "limitations": ["Original remote failure log unavailable", "No complete task or full-256K matrix", "Not all same-message scatter failures or tool loops are explained"]
+}

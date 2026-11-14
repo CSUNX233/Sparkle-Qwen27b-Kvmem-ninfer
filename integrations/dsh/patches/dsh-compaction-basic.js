@@ -334,7 +334,6 @@ async function summarizeWithLlm(ctx, config, input, agent, signal) {
 	} : void 0;
 	const target = configured ?? latest ?? agentTarget;
 	if (target === void 0) throw new Error("no provider/model available for summarization: set both BasicCompactionConfig summarization fields, route one request, or set both AgentOptions fields");
-	const assembler = new BlockAssembler();
 	const messages = [...input.messages, createUserMessage({
 		content: [{
 			type: "text",
@@ -345,7 +344,7 @@ async function summarizeWithLlm(ctx, config, input, agent, signal) {
 			plugin: "dsh-compaction-basic"
 		}
 	})];
-	const options = {
+	let options = {
 		provider: target.provider,
 		model: target.model,
 		messages,
@@ -355,12 +354,48 @@ async function summarizeWithLlm(ctx, config, input, agent, signal) {
 		purpose: "compaction",
 		...signal === void 0 ? {} : { signal }
 	};
-	for await (const chunk of ctx.llm.stream(options)) assembler.push(chunk);
-	const error = finishError(assembler.finish);
-	if (error !== void 0) throw error;
+	let assembler;
+	for (let attempt = 0; ; attempt += 1) {
+		assembler = new BlockAssembler();
+		for await (const chunk of ctx.llm.stream(options)) assembler.push(chunk);
+		const error = finishError(assembler.finish);
+		// A high-effort local model can spend the entire summary budget thinking.
+		// Retry once with a smaller reasoning effort for this auxiliary call only;
+		// never commit the truncated first output or change normal agent settings.
+		if (error?.code === "MAX_TOKENS" && attempt === 0 && options.provider === "ninfer-local") {
+			options = { ...options, reasoningEffort: "low" };
+			continue;
+		}
+		if (error !== void 0) {
+			if (attempt > 0 && error.code === "MAX_TOKENS") {
+				error.code = "COMPACTION_INCOMPLETE";
+				error.message = "Compaction summary remained truncated after retry; original history is preserved and the turn is stopped to avoid repeated attempts";
+			}
+			throw error;
+		}
+		break;
+	}
 	const rawOutput = assembler.blocks();
 	const summary = summaryText(rawOutput);
-	if (!summary.some((block) => block.text.trim().length > 0)) throw new Error("summarization produced no text summary content");
+	if (!summary.some((block) => block.text.trim().length > 0)) {
+		const error = new Error("summarization produced no text summary content");
+		if (options.reasoningEffort === "low") error.code = "COMPACTION_INCOMPLETE";
+		throw error;
+	}
+	if (options.reasoningEffort === "low") {
+		// The fallback must still preserve the requested checkpoint structure.
+		const text = summary.map((block) => block.text).join("\n").toLowerCase();
+		let position = 0;
+		for (const section of ["primary request and intent", "key technical concepts", "files and code", "errors and fixes", "pending jobs", "current work", "next step", "critical context"]) {
+			const found = text.indexOf(section, position);
+			if (found < 0) {
+				const error = new Error("Compaction fallback summary is incomplete; original history is preserved and the turn is stopped to avoid repeated attempts");
+				error.code = "COMPACTION_INCOMPLETE";
+				throw error;
+			}
+			position = found + section.length;
+		}
+	}
 	return {
 		summary,
 		rawOutput,
@@ -858,6 +893,10 @@ var BasicCompactionEngine = class extends CompactionEngine {
 				const result = await this.compactIfNeeded(agent, "pressure", signal);
 				if (result !== null) logResult(result, "step pressure");
 			} catch (error) {
+				if (error?.code === "COMPACTION_INCOMPLETE") {
+					ctx.logger.warn(`step compaction failed: ${error.message}`);
+					throw error;
+				}
 				if (error instanceof TargetPressureConfigError) {
 					if (this.warnedPressureConfigTargets.has(error.targetKey)) return next();
 					this.warnedPressureConfigTargets.add(error.targetKey);

@@ -1,5 +1,7 @@
 # v0.1.5 离线整合包：无模型版与完整版
 
+> 本页描述历史整合包和通用打包流程；v1.2.0 的 GitHub Release 引擎附件只有引擎，不能当作完整离线包。当前改动和验证范围见 [v1.2.0 说明](RELEASE_V1.2.0.md)。
+
 两个包均包含**引擎、便携 Node24.14.1、固定 dsh0.1.5-rc.3、网页工具 npm 依赖、cuBLAS13、LGPL shared FFmpeg、VC++ x64 安装器、源码、许可、安装提示词、纠错文档和更新说明**，不依赖 GitHub 在线部署。网盘由维护者上传，链接见视频简介/置顶评论。
 
 社区反馈 RTX30 系及以后、12GB+ 可运行本项目；16GB 可选择更大的 IQ3_S 模型。**这两包的预编译引擎均为 Windows x64 / sm120a（50系），30/40系需对应架构的兼容引擎和依赖，不能直接使用本 exe。** 建议32GB RAM和SSD。系统仍需兼容CUDA13的NVIDIA驱动及Microsoft Edge；不捆绑或自动修改驱动。
@@ -43,6 +45,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-bundle.ps1 -
 默认 **RK4V4 + GDN FP32**、xhigh、MTP3、逻辑262144、DeviceKV36864 / Retrieve3840 / HostKV7168MiB、sink12288 / recent19456、AnswerPenaltyScope=answer，启用C2.1锚点和batch32。16GB卡选择IQ3_S时同样先保留起步预算再验证，不自动扩大页池。NVFP4 不是省显存选项；v1.1.0 的日常进阶档与数据见 [v1.1.0 记录](QUALITY_FIDELITY_V1.1.0.md)。
 
 ## 文字与CPU视觉切换
+
+外部的 text+vision+MTP 模型也可在安装时传入 `-VisionGPU`，启用 GPU 常驻视觉并向 dsh 声明图片输入；对应 `config/local.json` 为 `VisionGPU=true`、`VisionCPU=false`。GPU 视觉需要额外显存，不保证适合所有 16GB 设备；停止服务后可切回 CPU 视觉（`VisionCPU=true`、`VisionGPU=false`）并重新生成 dsh 配置。两项不能同时为 true。
 
 **默认GSQ纯文字，不启用视觉**；第一次安装GSQ时写入 `VisionCPU=false`，dsh只声明text输入。完整包文件存在不代表加载视觉。
 

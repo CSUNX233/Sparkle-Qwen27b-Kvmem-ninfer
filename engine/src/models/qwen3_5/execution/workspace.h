@@ -42,10 +42,12 @@ TextPrefillRoots text_prefill_roots(Allocator& allocator, const TextConfig& conf
     out.residual = matrix(allocator, DType::BF16, dimension(config.hidden_size), tokens);
     if (scatter_tokens != 0) {
         out.scatter_indices = vector(allocator, DType::I32, scatter_tokens);
-        if (overlay_staging) {
-            out.visual_embeddings =
-                matrix(allocator, DType::BF16, dimension(config.hidden_size), scatter_tokens + 1);
-        }
+    }
+    if (overlay_staging) {
+        // MTP also needs the next visual column when this chunk ends exactly
+        // before the first visual token, even when scatter_tokens is zero.
+        out.visual_embeddings =
+            matrix(allocator, DType::BF16, dimension(config.hidden_size), scatter_tokens + 1);
     }
     return out;
 }

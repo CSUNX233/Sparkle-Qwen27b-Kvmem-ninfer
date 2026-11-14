@@ -185,6 +185,13 @@ ninfer_add_test(ninfer_qwen3_5_visual_scatter_test
   SOURCES "${CMAKE_CURRENT_LIST_DIR}/test_visual_scatter.cpp"
   LIBRARIES ninfer_engine ninfer_core)
 
+# Uses stub launchers to exercise the MTP image-boundary shape without a GPU.
+ninfer_add_test(ninfer_qwen3_5_visual_chunk_boundary_test
+  STANDALONE
+  SOURCES "${CMAKE_CURRENT_LIST_DIR}/test_visual_chunk_boundary.cpp"
+          "${PROJECT_SOURCE_DIR}/src/ops/wrapper/scatter.cpp"
+  LIBRARIES ninfer_core ${NINFER_CUDART_TARGET})
+
 set_tests_properties(
   ninfer_qwen3_5_visual_scatter_test
   PROPERTIES SKIP_RETURN_CODE 77)

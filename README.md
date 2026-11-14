@@ -6,12 +6,12 @@
 
 NInfer 推理 · KVMem 分层 KV · MTP3 推测解码 · dsh Agent 工作台
 
-[![Version](https://img.shields.io/badge/version-v1.1.0-2ea44f?style=flat-square)](docs/RELEASE_NOTES.md)
-[![Engine](https://img.shields.io/badge/engine-8b2c195e-0969da?style=flat-square)](docs/QUALITY_FIDELITY_V1.1.0.md)
+[![Version](https://img.shields.io/badge/version-v1.2.0-2ea44f?style=flat-square)](docs/RELEASE_V1.2.0.md)
+[![Engine](https://img.shields.io/badge/engine-f9a6b29c-0969da?style=flat-square)](docs/RELEASE_V1.2.0.md)
 [![Platform](https://img.shields.io/badge/platform-Windows%20x64%20%2F%20sm120a-0078d4?style=flat-square)](docs/BUILD.md)
 [![License](https://img.shields.io/badge/license-Apache--2.0-lightgrey?style=flat-square)](LICENSE)
 
-[快速开始](#快速开始) · [v1.1.0 更新](#v110-更新) · [实测数据](#实测数据) · [文档地图](#文档地图) · [下载](https://github.com/CSUNX233/Sparkle-Qwen27b-Kvmem-ninfer/releases/tag/v1.1.0)
+[快速开始](#快速开始) · [v1.2.0 更新](#v120-更新) · [实测数据](#实测数据) · [文档地图](#文档地图) · [下载](https://github.com/CSUNX233/Sparkle-Qwen27b-Kvmem-ninfer/releases/tag/v1.2.0)
 
 </div>
 
@@ -24,14 +24,23 @@ NInfer 推理 · KVMem 分层 KV · MTP3 推测解码 · dsh Agent 工作台
 | **这是什么？** | 一个面向本地代码/文件/网页任务的 27B Agent 运行栈：NInfer 引擎 + KVMem 长历史 + MTP3 + dsh 网页 / Pmod 桌面界面。 |
 | **跑在哪？** | 维护者直接验证 **RTX 5070 Ti Laptop 12GB / i7-14650HX / 32GB RAM / Windows**；其他 12GB+ 显卡需要匹配架构的构建。 |
 | **默认配置？** | Qwen3.8-27B GSQ-RCO IQ3_XXS + MTP3，**RK4V4 + GDN FP32**，DeviceKV 36864 / Retrieve 3840 / HostKV 7168 MiB，xhigh。 |
-| **v1.1.0 的重点？** | 检索前邻页补齐、畸形工具外壳修复、RK4V4/GDN FP32 日常切换、dsh 状态卡。 |
-| **不适合什么？** | 不能把它当成“所有任务全面超过云端模型”的证明；多图 + compaction 仍有一个已记录的 `scatter` 失败。 |
+| **v1.2.0 的重点？** | 修复 CPU 视觉分块边界 `scatter`，为摘要截断增加有界恢复，并恢复 DSH 思考强度界面。 |
+| **不适合什么？** | 不能把它当成“所有任务全面超过云端模型”或所有同名错误、工具循环均已消失的证明。 |
 
 > **桌面端：** 仓库同时包含 [`desktop/`](desktop/) 的 **Pmod** 图形工作台（Tauri 2 + Vue 3.5），提供对话、模型配置、显存监控和 OpenAI 兼容网关；安装包构建脚本在 [`scripts/build-inno-installer.ps1`](scripts/build-inno-installer.ps1)。这是可选前端，不改变引擎和默认 Agent。
 
 ![Pmod 桌面端](docs/images/02-chat.png)
 
-## v1.1.0 更新
+## v1.2.0 更新
+
+- **图片分块修复**：CPU/host-staged 视觉与 MTP 同时启用时，图片首个视觉 token 正好位于预填充分块边界，旧引擎可能产生 `scatter` 形状错误；修复后真实模型边界请求通过，最坏情况暂存规划不增加。
+- **压缩恢复**：本地模型摘要首次达到输出上限时，仅对这次摘要以 low 思考强度重试一次。重试不完整时保留原历史并停止当前轮；日常对话思考强度不变。
+- **DSH 与部署**：恢复模型/思考强度选择界面，支持显式 GPU 视觉选项；公开默认页池仍为 36864/3840，默认不启用视觉。
+- **验证范围**：真实长任务到约 212K 输入 token 时复现摘要截断；真实失败历史回放生成完整摘要，并在隔离会话中验证压缩后带两张截图的工具续接。首次续接曾出现额外调用，严格复测通过；不保证所有循环已解决。
+
+[下载 v1.2.0 引擎附件](https://github.com/CSUNX233/Sparkle-Qwen27b-Kvmem-ninfer/releases/download/v1.2.0/ninfer-5070ti-win-x64-sm120a-v1.2.0.zip)（仅引擎，不含模型、DSH 或运行 DLL）。引擎 SHA-256 `f9a6b29cb7755b18ae02dcc130c17b5e28b2c97530c647db9936680bd5c2ad46`；[完整说明与验证边界](docs/RELEASE_V1.2.0.md)。源码更新后还需运行 `setup.ps1` 才会更新已安装的引擎和 DSH 补丁。
+
+## v1.1.0 更新（历史）
 
 验证引擎 SHA-256：
 
@@ -65,7 +74,7 @@ NInfer 推理 · KVMem 分层 KV · MTP3 推测解码 · dsh Agent 工作台
 - **2026-11-12 后续修复（v0.1.3，main）。** 原触发用 `attempts.length % 3`，而 `attempts` 最多保留 8 条，存满后普通 shell 调用不再发卡。v0.1.3 改用独立 `shellCalls` 计数器；9 次 shell 的集成测试在第 3/6/9 次各发一张卡，旧实现只会发前两张。v1.1.0 Release 中的 dsh ZIP 仍是 v0.1.2；需要使用修复版请从 `main` 源码安装或等待下一次 dsh 包更新。
 - 5 次多文件重构 A/B：P0 均值 **15.8 步 / 23.4 次调用 / 0.8 次重复 / 43,164 上下文 / 260 秒**；baseline **16.0 / 25.4 / 2.40 / 53,825 / 348 秒**；两边 5/5 测试通过。**步数只下降 1.3%，范围重叠，n=5 不构成统计显著**；方向性信号是重复调用、上下文、输出和耗时更低。pruner 阈值放宽和 `pruner-bridge` 仍是实验项，未并入日常。
 
-### 已知问题
+### v1.1.0 的已知问题（历史）
 
 多图 + compaction 后的一个请求在 **prefill** 阶段报：
 
@@ -101,7 +110,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1 `
 
 ### 方式 B：引擎附件
 
-下载上面的 `v1.1.0` ZIP，把 `ninfer-serve.exe` 放到 `runtime/engine/`，再运行 `setup.ps1` 完成依赖与配置。引擎附件不含模型、Node、dsh 或运行 DLL，不是完整整合包。
+下载上面的 `v1.2.0` ZIP，把 `ninfer-serve.exe` 放到 `runtime/engine/`，再运行 `setup.ps1` 完成依赖与配置。引擎附件不含模型、Node、dsh 或运行 DLL，不是完整整合包。
 
 ### 默认端口
 
@@ -190,6 +199,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1 `
 
 | 我想… | 先看 |
 |---|---|
+| **了解 v1.2.0 和测试边界** | [v1.2.0 更新说明](docs/RELEASE_V1.2.0.md) · [脱敏验证汇总](benchmarks/evidence/v1.2.0/validation.json) |
 | **安装 / 升级 / 排错** | [安装说明](docs/INSTALL.md) · [部署维护手册](docs/DEPLOYMENT_AGENT_GUIDE.md) · [纠错文档](docs/TROUBLESHOOTING.md) |
 | **了解 v1.1.0 改了什么** | [v1.1.0 质量保真记录](docs/QUALITY_FIDELITY_V1.1.0.md) · [Release Notes](docs/RELEASE_NOTES.md) |
 | **核对两个引擎补丁** | [前邻页修复](docs/DEFERRED_NEIGHBOR_FIX.md) · [工具外壳修复](docs/TOOL_ENVELOPE_FIX.md) |
@@ -202,7 +212,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1 `
 
 - **没有完成满 256K 验收。** 逻辑容量是 262,144；实际 dsh 压缩阈值约 184K，长历史中段通过检索选页。
 - **232K 随机串压力不代表真实任务。** 多轮结果不稳定且跨格式共性，不作为质量承诺；真实内容 190K 为 24/24。
-- **多图 + compaction 的 `scatter` 失败尚未在引擎层修复。** 处理方式是开新会话；详见 [已知问题](#已知问题)。
+- **`scatter` 不只有一种可能原因。** 本版修复了已稳定复现的 CPU 视觉分块边界问题；原故障机器日志缺失，不能断言所有同名错误已解决。[验证范围](docs/RELEASE_V1.2.0.md)。
 - **状态卡 n=5 不构成统计显著。** 步数基本持平，收益主要在重复调用/上下文/耗时。
 - **本次预编译引擎只覆盖 Windows x64 / sm120a。** 30/40 系与其他模型需自行构建/验证。
 - **搜索需要互联网。** dsh 的网页/搜索不是离线索引，站点改版或验证码会导致失败。
@@ -246,6 +256,6 @@ v0.1.0–v0.1.4 的检索上下文、semantic history、NVFP4、工具解析、�
 
 <div align="center">
 
-**[⬆ 回到顶部](#sparkle-qwen27b-kvmem-ninfer)** · [下载 v1.1.0](https://github.com/CSUNX233/Sparkle-Qwen27b-Kvmem-ninfer/releases/tag/v1.1.0) · [提交 Issue](https://github.com/CSUNX233/Sparkle-Qwen27b-Kvmem-ninfer/issues)
+**[⬆ 回到顶部](#sparkle-qwen27b-kvmem-ninfer)** · [下载 v1.2.0](https://github.com/CSUNX233/Sparkle-Qwen27b-Kvmem-ninfer/releases/tag/v1.2.0) · [提交 Issue](https://github.com/CSUNX233/Sparkle-Qwen27b-Kvmem-ninfer/issues)
 
 </div>

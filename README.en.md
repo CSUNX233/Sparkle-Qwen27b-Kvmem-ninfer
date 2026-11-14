@@ -6,12 +6,12 @@
 
 NInfer inference · KVMem tiered KV · MTP3 speculative decoding · dsh Agent workspace
 
-[![Version](https://img.shields.io/badge/version-v1.1.0-2ea44f?style=flat-square)](docs/RELEASE_NOTES.md)
-[![Engine](https://img.shields.io/badge/engine-8b2c195e-0969da?style=flat-square)](docs/QUALITY_FIDELITY_V1.1.0.md)
+[![Version](https://img.shields.io/badge/version-v1.2.0-2ea44f?style=flat-square)](docs/RELEASE_V1.2.0.md)
+[![Engine](https://img.shields.io/badge/engine-f9a6b29c-0969da?style=flat-square)](docs/RELEASE_V1.2.0.md)
 [![Platform](https://img.shields.io/badge/platform-Windows%20x64%20%2F%20sm120a-0078d4?style=flat-square)](docs/BUILD.md)
 [![License](https://img.shields.io/badge/license-Apache--2.0-lightgrey?style=flat-square)](LICENSE)
 
-[Quick start](#quick-start) · [v1.1.0](#v110-update) · [Measurements](#measurements) · [Docs](#documentation-map) · [Download](https://github.com/CSUNX233/Sparkle-Qwen27b-Kvmem-ninfer/releases/tag/v1.1.0)
+[Quick start](#quick-start) · [v1.2.0](#v120-update) · [Measurements](#measurements) · [Docs](#documentation-map) · [Download](https://github.com/CSUNX233/Sparkle-Qwen27b-Kvmem-ninfer/releases/tag/v1.2.0)
 
 </div>
 
@@ -24,14 +24,23 @@ NInfer inference · KVMem tiered KV · MTP3 speculative decoding · dsh Agent wo
 | **What is this?** | A local Agent stack for coding, files and web tasks: NInfer engine + KVMem long history + MTP3 + optional dsh web UI / Pmod desktop. |
 | **Where does it run?** | Directly validated on **RTX 5070 Ti Laptop 12GB / i7-14650HX / 32GB RAM / Windows**. Other 12GB+ GPUs need architecture-matched builds. |
 | **Defaults?** | Qwen3.8-27B GSQ-RCO IQ3_XXS + MTP3, **RK4V4 + GDN FP32**, DeviceKV 36864 / Retrieve 3840 / HostKV 7168 MiB, xhigh. |
-| **v1.1.0 focus?** | Predecessor-page retrieval fix, malformed tool-envelope fix, RK4V4/GDN FP32 daily default, dsh state card. |
-| **What it is not?** | Proof that every task beats cloud models. A multi-image + compaction `scatter` failure remains documented. |
+| **v1.2.0 focus?** | CPU vision chunk-boundary fix, bounded recovery from truncated summaries, and restored DSH reasoning controls. |
+| **What it is not?** | Proof that every task beats cloud models or that all similarly named errors and tool loops are resolved. |
 
 > **Desktop:** the repository also contains the **Pmod** GUI in [`desktop/`](desktop/) (Tauri 2 + Vue 3.5): chat, model configuration, VRAM monitoring and an OpenAI-compatible gateway. The installer build script is [`scripts/build-inno-installer.ps1`](scripts/build-inno-installer.ps1). It is an optional frontend and does not change the engine or default Agent.
 
 ![Pmod desktop](docs/images/02-chat.png)
 
-## v1.1.0 update
+## v1.2.0 update
+
+- **Image boundary:** CPU/host-staged vision with MTP could hit a `scatter` shape error when the first image token landed at a prefill boundary. The fix stages the needed next column without increasing the planned worst-case staging allocation.
+- **Compaction recovery:** if a local model's first summary reaches the output cap, discard it and retry that auxiliary summary once at low reasoning effort. An incomplete retry preserves history and stops the turn; normal conversation settings are unchanged.
+- **DSH and deployment:** model/reasoning controls are enabled and GPU vision can be selected explicitly. The public 36864/3840 starting budget remains unchanged; vision is off by default.
+- **Validation:** a real task reached about 212K input tokens and exposed the old summary truncation. A real-model replay produced a complete summary; an isolated DSH transaction and a two-image xhigh tool continuation were checked. One earlier continuation made an extra tool call; a stricter repeat passed, which does not rule out every loop.
+
+[Download the v1.2.0 engine asset](https://github.com/CSUNX233/Sparkle-Qwen27b-Kvmem-ninfer/releases/download/v1.2.0/ninfer-5070ti-win-x64-sm120a-v1.2.0.zip). It contains the engine only, without model weights, DSH or runtime DLLs. Engine SHA-256: `f9a6b29cb7755b18ae02dcc130c17b5e28b2c97530c647db9936680bd5c2ad46`. See the [release details and test limits](docs/RELEASE_V1.2.0.md). After updating source, run `setup.ps1` to update the installed engine and DSH patches.
+
+## v1.1.0 update (historical)
 
 Verified engine SHA-256:
 
@@ -65,7 +74,7 @@ The disabled same-lineage baseline peaked at 11,230/11,242 MiB; the 2 MiB differ
 - **Post-release fix (v0.1.3, main).** The old trigger used `attempts.length % 3`; `attempts` is capped at 8 entries, so ordinary shell calls stopped emitting cards once it filled. v0.1.3 uses a separate `shellCalls` counter; the nine-shell integration test emits at calls 3/6/9, while the old code emits only the first two. The v1.1.0 release dsh ZIP still contains v0.1.2; use `main` or wait for the next dsh package update.
 - Five-run refactor A/B: P0 **15.8 steps / 23.4 calls / 0.8 duplicates / 43,164 context / 260 s**; baseline **16.0 / 25.4 / 2.40 / 53,825 / 348 s**; both 5/5 tests. **Step count is flat (-1.3%) and ranges overlap; n=5 is not statistically significant.** Pruner threshold changes and `pruner-bridge` remain experimental and are not in the daily profile.
 
-### Known issue
+### v1.1.0 known issue (historical)
 
 A 99-message, 7-media request after compaction failed during prefill with:
 
@@ -101,7 +110,7 @@ The first start downloads checksum-pinned dependencies, loads weights and captur
 
 ### Option B: engine asset
 
-Download the `v1.1.0` ZIP, place `ninfer-serve.exe` in `runtime/engine/`, then run `setup.ps1`. The asset contains no model, Node, dsh or runtime DLLs.
+Download the `v1.2.0` ZIP, place `ninfer-serve.exe` in `runtime/engine/`, then run `setup.ps1`. The asset contains no model, Node, dsh or runtime DLLs.
 
 ### Default ports
 
@@ -191,6 +200,7 @@ request -> dsh Agent / tools -> cache guard -> NInfer engine
 | I want to... | Read |
 |---|---|
 | **Install / upgrade / troubleshoot** | [Install](docs/INSTALL.md) · [Deployment guide](docs/DEPLOYMENT_AGENT_GUIDE.md) · [Troubleshooting](docs/TROUBLESHOOTING.md) |
+| **Understand v1.2.0 and its test limits** | [v1.2.0 details](docs/RELEASE_V1.2.0.md) · [Sanitized validation summary](benchmarks/evidence/v1.2.0/validation.json) |
 | **Understand v1.1.0** | [v1.1.0 quality record](docs/QUALITY_FIDELITY_V1.1.0.md) · [Release notes](docs/RELEASE_NOTES.md) |
 | **Inspect the two engine patches** | [Predecessor fix](docs/DEFERRED_NEIGHBOR_FIX.md) · [Tool-envelope fix](docs/TOOL_ENVELOPE_FIX.md) |
 | **See sanitized data** | [`benchmarks/evidence/v1.1.0/`](benchmarks/evidence/v1.1.0/) · [`benchmarks/qualification/`](benchmarks/qualification/) |
@@ -202,7 +212,7 @@ request -> dsh Agent / tools -> cache guard -> NInfer engine
 
 - **Full 256K is not validated.** The logical capacity is 262,144; dsh compaction is around 184K, and long-history middle sections are retrieved by page selection.
 - **232K random-string stress is not a real-task metric.** Results were unstable across repeats and common across formats; real-content 190K passed 24/24.
-- **The multi-image + compaction `scatter` failure is not fixed in the engine.** Start a new session; see [Known issue](#known-issue).
+- **A `scatter` message can have multiple causes.** This release fixes a reproducible CPU vision boundary case; the original remote logs are unavailable, so not all similarly named failures can be claimed fixed. See the [validation scope](docs/RELEASE_V1.2.0.md).
 - **State-card n=5 is not statistically significant.** Steps are flat; the directional gain is fewer duplicates/context/time.
 - **The prebuilt engine covers Windows x64 / sm120a only.** RTX 30/40 and other models need their own builds and validation.
 - **Search needs the internet.** dsh search is not an offline index; site changes or captchas can break it.
@@ -239,6 +249,6 @@ Special thanks to Bilibili [0xFFFF7](https://search.bilibili.com/upuser?keyword=
 
 <div align="center">
 
-**[Back to top](#sparkle-qwen27b-kvmem-ninfer)** · [Download v1.1.0](https://github.com/CSUNX233/Sparkle-Qwen27b-Kvmem-ninfer/releases/tag/v1.1.0) · [Open an issue](https://github.com/CSUNX233/Sparkle-Qwen27b-Kvmem-ninfer/issues)
+**[Back to top](#sparkle-qwen27b-kvmem-ninfer)** · [Download v1.2.0](https://github.com/CSUNX233/Sparkle-Qwen27b-Kvmem-ninfer/releases/tag/v1.2.0) · [Open an issue](https://github.com/CSUNX233/Sparkle-Qwen27b-Kvmem-ninfer/issues)
 
 </div>

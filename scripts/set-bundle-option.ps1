@@ -15,6 +15,7 @@ if ($Model) {
     if ($selected.Count -ne 1 -or -not (Test-Path -LiteralPath (Resolve-ProjectPath $selected[0].path))) { throw 'Bundled model is missing.' }
     $config.ModelPath = $selected[0].path; $config.ModelId = $selected[0].model_id
     $config | Add-Member -NotePropertyName VisionCPU -NotePropertyValue ($selected[0].vision_cpu -eq $true) -Force
+    $config | Add-Member -NotePropertyName VisionGPU -NotePropertyValue $false -Force
 }
 if ($PenaltyScope) { $config | Add-Member -NotePropertyName AnswerPenaltyScope -NotePropertyValue $PenaltyScope -Force }
 if ($KVDType) { $config | Add-Member -NotePropertyName KVDType -NotePropertyValue $KVDType -Force }

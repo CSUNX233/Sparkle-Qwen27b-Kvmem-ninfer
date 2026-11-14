@@ -17,5 +17,6 @@
   "ReasoningEffort": "xhigh",
   "AnswerPenaltyScope": "answer",
   "ToolGroundedExecution": true,
-  "VisionCPU": false
+  "VisionCPU": false,
+  "VisionGPU": false
 }

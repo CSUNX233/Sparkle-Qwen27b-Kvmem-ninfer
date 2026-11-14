@@ -3,7 +3,7 @@
   "upstream": "https://github.com/iamwavecut/ninfer-all",
   "upstream_base_reported_by_bundle": "v0.11.0-rtx3090; KVMem integration reference 65dbd4f2",
   "original_git_history_available": false,
-  "engine_binary_sha256": "8b2c195e32e3b58a3584b284679c990a07986691967f1b939b0fe31351559012",
+  "engine_binary_sha256": "f9a6b29cb7755b18ae02dcc130c17b5e28b2c97530c647db9936680bd5c2ad46",
   "copy_count": 2407,
   "locally_recorded_modified_files": [
     "docs/serving.md",
@@ -86,11 +86,11 @@
     "contribution": "Provided the foundation distribution downloaded by the maintainer and resolved the reported infinite-loop issue.",
     "source": "Maintainer attribution supplied for this publication; not a claim of sole upstream authorship."
   },
-  "release_source_url": "https://github.com/CSUNX233/Sparkle-Qwen27b-Kvmem-ninfer/tree/v1.1.0",
+  "release_source_url": "https://github.com/CSUNX233/Sparkle-Qwen27b-Kvmem-ninfer/tree/v1.2.0",
   "previous_release": {
-    "version": "1.0.0",
-    "engine_binary_sha256": "71259a21f7b525ca7477193a292e4d3623cc58b9efd785005ee934cc29673507",
-    "source_url": "https://github.com/CSUNX233/Sparkle-Qwen27b-Kvmem-ninfer/tree/v1.0.0"
+    "version": "1.1.0",
+    "engine_binary_sha256": "8b2c195e32e3b58a3584b284679c990a07986691967f1b939b0fe31351559012",
+    "source_url": "https://github.com/CSUNX233/Sparkle-Qwen27b-Kvmem-ninfer/tree/v1.1.0"
   },
   "retrieval_context_patch": {
     "engine_sha256": "34fd593d76bd332c1b8470ce5ffe4fd9e7e9820229558cffd1cf9ddaa386224b",
@@ -476,5 +476,22 @@
       "State-card A/B n=5 is directional, not statistically significant.",
       "Only Windows x64 sm120a / RTX 5070 Ti Laptop 12GB was directly validated."
     ]
+  },
+  "earlier_release_v100": {
+    "version": "1.0.0",
+    "engine_binary_sha256": "71259a21f7b525ca7477193a292e4d3623cc58b9efd785005ee934cc29673507",
+    "source_url": "https://github.com/CSUNX233/Sparkle-Qwen27b-Kvmem-ninfer/tree/v1.0.0"
+  },
+  "release_v120_build": {
+    "kind": "incremental",
+    "source_base": "1690a9c363c26a14799accc0c18b1965bc96531c with v1.2.0 source changes",
+    "host_units": 71,
+    "cuda_units": 11,
+    "clean_full_build": false,
+    "changed_engine_sources": [
+      "src/models/qwen3_5/execution/text.cpp",
+      "src/models/qwen3_5/execution/workspace.h"
+    ],
+    "engine_archive_sha256": "e45c21e4327cb3020af39c884bf60edec3592aa3045d00d5d942346bdf2afe22"
   }
 }

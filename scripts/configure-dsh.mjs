@@ -103,13 +103,15 @@ const settingsFile = path.join(home, 'settings.yaml');
 const settings = document(settingsFile, {});
 settings['llm-pi-ai'] ??= {};
 settings['llm-pi-ai'].providers ??= {};
+if (cfg.VisionCPU === true && cfg.VisionGPU === true) throw new Error('Choose only one of VisionCPU or VisionGPU');
+const visionEnabled = cfg.VisionCPU === true || cfg.VisionGPU === true;
 settings['llm-pi-ai'].providers['ninfer-local'] = {
   displayName: 'NInfer · Local KVMem', api: 'openai-completions',
   baseURL: `http://127.0.0.1:${cfg.GuardPort}/v1`, apiKeyEnv: 'NINFER_LOCAL_KEY', streamIdleTimeoutMs: 1800000,
   compat: { supportsDeveloperRole: false, supportsReasoningEffort: true,
     maxTokensField: 'max_tokens', requiresReasoningContentOnAssistantMessages: true },
-  models: [{ id: cfg.ModelId, name: `${cfg.ModelId} · KVMem${cfg.VisionCPU === true ? ' · CPU Vision' : ''}`,
-    contextWindow: cfg.MaxContext, maxTokens: 73728, input: cfg.VisionCPU === true ? ['text', 'image'] : ['text'],
+  models: [{ id: cfg.ModelId, name: `${cfg.ModelId} · KVMem${cfg.VisionCPU === true ? ' · CPU Vision' : cfg.VisionGPU === true ? ' · GPU Vision' : ''}`,
+    contextWindow: cfg.MaxContext, maxTokens: 73728, input: visionEnabled ? ['text', 'image'] : ['text'],
     reasoningEfforts: { low: 'low', medium: 'medium', xhigh: 'xhigh' } }],
 };
 settings['agent-default-model'] ??= { provider: 'ninfer-local', model: cfg.ModelId, reasoningEffort: cfg.ReasoningEffort };
@@ -123,8 +125,6 @@ const entries = [
   { id: 'web', config: { searchProvider: 'local-free', fetchProvider: 'local-http' } },
   { id: 'web-search-deepseek', disabled: true },
   { id: 'web-fetch-http', disabled: true },
-  { id: 'ui-trajectory', disabled: true },
-  { id: 'ui-model-selection', disabled: true },
   { insert: [
     { id: 'web-local', name: moduleURL('local-web/web-provider.mjs') },
     { id: 'todo-completion', name: moduleURL('local-agent/todo-completion.mjs') },

@@ -46,25 +46,34 @@ function Enter-LaunchMutex {
     return $mutex
 }
 
+function Get-SHA256File([string]$Path) {
+    $hasher = [Security.Cryptography.SHA256]::Create()
+    try {
+        $stream = [IO.File]::OpenRead($Path)
+        try { return [BitConverter]::ToString($hasher.ComputeHash($stream)).Replace('-', '') }
+        finally { $stream.Dispose() }
+    } finally { $hasher.Dispose() }
+}
+
 function Get-PinnedArchive($Spec) {
     $target = Join-Path $script:RuntimeRoot ('cache/' + $Spec.name)
     if (-not (Test-Path -LiteralPath $target)) {
         Write-Output ('Downloading ' + $Spec.name + ' ...') | Out-Host
         $partial = $target + '.part'
         Invoke-WebRequest -Uri $Spec.url -OutFile $partial -UseBasicParsing -TimeoutSec 1800
-        if ((Get-FileHash -LiteralPath $partial -Algorithm SHA256).Hash -ne $Spec.sha256) {
+        if ((Get-SHA256File $partial) -ne $Spec.sha256) {
             throw ('Download checksum mismatch: ' + $Spec.name)
         }
         Move-Item -LiteralPath $partial -Destination $target -Force
     }
-    if ((Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash -ne $Spec.sha256) {
+    if ((Get-SHA256File $target) -ne $Spec.sha256) {
         throw ('Cached archive checksum mismatch: ' + $target)
     }
     return $target
 }
 
 function Test-ExpectedFile([string]$Path, [string]$Hash) {
-    return (Test-Path -LiteralPath $Path -PathType Leaf) -and ((Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash -eq $Hash)
+    return (Test-Path -LiteralPath $Path -PathType Leaf) -and ((Get-SHA256File $Path) -eq $Hash)
 }
 
 function Assert-PortFree([int]$Port) {
