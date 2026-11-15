@@ -17,7 +17,7 @@ NInfer 推理 · KVMem 分层 KV · MTP3 推测解码 · dsh Agent 工作台
 
 > **逻辑上下文 256K，不代表每一步都读取全部历史。** 长历史由 KVMem 存在 Host RAM，按检索结果调入 GPU；这减少了重复预填充，但不等于已完成满 256K 验收，也不保证每个任务都更快。
 
-> **需要双并发（2 路）？** 使用 [`kvmem-dual-lane`](https://github.com/CSUNX233/Sparkle-Qwen27b-Kvmem-ninfer/tree/kvmem-dual-lane) 分支；`main` 保持单路日常版，分支未合并。该分支是受控试用候选，需显式设置 `NINFER_KV_COMPACT=1`；12GB 已验证双路 40K×2 + MTP3 eager（131K context / 32K pool），完整 16GB 预算与双路 MTP+Graph 尚未验收。源码构建与限制见分支内 [双路交接](https://github.com/CSUNX233/Sparkle-Qwen27b-Kvmem-ninfer/blob/kvmem-dual-lane/docs/KVMEM_DUAL_LANE_HANDOFF.md)。
+> **需要双并发（2 路）？** 使用 [`kvmem-dual-lane`](https://github.com/CSUNX233/Sparkle-Qwen27b-Kvmem-ninfer/tree/kvmem-dual-lane) 分支；`main` 保持单路日常版，分支未合并。该分支是受控试用候选，需显式设置 `NINFER_KV_COMPACT=1`；12GB 已验证双路 40K×2 + MTP3 eager（131K context / 32K pool），完整 16GB 预算与双路 MTP+Graph 尚未验收。预编译 v6 引擎：[下载](https://github.com/CSUNX233/Sparkle-Qwen27b-Kvmem-ninfer/releases/download/kvmem-dual-lane-v6/ninfer-dual-lane-v6-win-x64-sm120a.exe)（SHA-256 `14e97b700b25957d3caf636bc48a43f7b399fce8f9cec1f4550ecd4a1adc8ce9`）；源码构建与限制见分支内 [双路交接](https://github.com/CSUNX233/Sparkle-Qwen27b-Kvmem-ninfer/blob/kvmem-dual-lane/docs/KVMEM_DUAL_LANE_HANDOFF.md)。
 
 ## 30 秒了解
 
