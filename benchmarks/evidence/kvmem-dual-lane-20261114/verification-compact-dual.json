@@ -1,0 +1,141 @@
+{
+ "date": "2026-11-14",
+ "branch": "codex/kvmem-dual-lane",
+ "stage": "stage 5: two-lane compact decode and a forced batch-decode round",
+ "status": "two lanes run with per-lane compact views; a batch round of 2 is exercised; outputs are coherent and recall the right codes, but serial-vs-batch outputs are not bit-identical (the dense control shows the same)",
+ "candidate_engine_sha256": "4cb99db1bdcc4e6c952d03830449ffea34152180f25062e4d893a5de6023ca7c",
+ "startup_gates_relaxed_under_compact": [
+  "ring + max-concurrency 2 allowed only with NINFER_KV_COMPACT=1",
+  "KVMem score + max-concurrency 2 allowed only with compact",
+  "decode indexing still requires one lane; the dual tests unset NINFER_KVMEM_INDEX_DECODE",
+  "compact still requires ordinary decode, no vision, no CUDA Graph"
+ ],
+ "per_lane_layout": {
+  "window_tokens": 19456,
+  "sink_tokens": 12288,
+  "retrieve_tokens": 6144,
+  "pool_tokens": 40960,
+  "selection_capacity": "min(window, pool/max_concurrency) - ring slack; each lane selects sink + retrieval + newest; the batch envelope spans both compact prefixes"
+ },
+ "two_lane_40k": {
+  "prompt_tokens": 40946,
+  "codes": {
+   "A": "ZQ-7391",
+   "B": "ZQ-8246"
+  },
+  "serial_equals_concurrent": {
+   "A": true,
+   "B": true
+  },
+  "code_found": {
+   "A": true,
+   "B": true
+  },
+  "batch_round_observed": false,
+  "note": "8-token outputs finish before the second prefill completes; this run proves two active lanes and per-lane compact views, not a batch round",
+  "peak_gpu_mib": {
+   "serial": 10950,
+   "concurrent": 10950
+  }
+ },
+ "forced_batch_10k": {
+  "prompt_tokens": 10108,
+  "window_tokens": 8192,
+  "codes": {
+   "A": "ZQ-7391",
+   "B": "ZQ-8246"
+  },
+  "batch_decode_rows2_logged": true,
+  "code_found": {
+   "A": true,
+   "B": true
+  },
+  "serial_equals_concurrent": {
+   "A": false,
+   "B": false
+  },
+  "common_prefix_chars": {
+   "A": 868,
+   "B": 48
+  },
+  "completion_tokens": {
+   "A": {
+    "serial": 1226,
+    "concurrent": 1080
+   },
+   "B": {
+    "serial": 1071,
+    "concurrent": 1107
+   }
+  },
+  "tail_error": false,
+  "peak_gpu_mib": {
+   "serial": 10952,
+   "concurrent": 10982
+  },
+  "note": "both 1,000+ token answers are coherent and contain their own code; greedy outputs diverge from the serial arms after a prefix"
+ },
+ "dense_control_10k": {
+  "prompt_tokens": 10108,
+  "max_concurrency": 2,
+  "kv_capacity_tokens": 24576,
+  "scope": "dense control: two lanes, no ring/compact/KVMem, same 10,108-token prompts and long outputs; measures the engine batch-vs-serial numerical divergence",
+  "serial_equals_concurrent": {
+   "A": false,
+   "B": false
+  },
+  "common_prefix_chars": {
+   "A": 750,
+   "B": 64
+  },
+  "completion_tokens": {
+   "A": {
+    "serial": 1176,
+    "concurrent": 1263
+   },
+   "B": {
+    "serial": 1019,
+    "concurrent": 1153
+   }
+  },
+  "code_found": {
+   "A": true,
+   "B": true
+  },
+  "peak_gpu_mib": {
+   "serial": 10926,
+   "concurrent": 10926
+  },
+  "conclusion": "the same batch-vs-serial divergence appears without KVMem/compact/ring, so it is an engine batch-size numerical effect, not introduced by compaction"
+ },
+ "daily_config_compact_off": {
+  "passed": true,
+  "daily_files_unchanged": true,
+  "message_equality": {
+   "short": true,
+   "follow": true,
+   "visual_boundary": true,
+   "prompt_tokens": true
+  },
+  "peak_gpu_mib": {
+   "baseline": 11238,
+   "candidate": 11234
+  },
+  "candidate_sha256_in_that_run": "0d34353f0938a4a0f6ce3fbf711bbbbefe7489a6953344a14a3f15efc5300750",
+  "note": "the per-lane cap added afterwards is compact-only; the compact-off daily path is unchanged"
+ },
+ "daily_engine_unchanged": {
+  "sha256": "f9a6b29cb7755b18ae02dcc130c17b5e28b2c97530c647db9936680bd5c2ad46",
+  "installed_engine_replaced": false,
+  "launch_or_config_changed": false
+ },
+ "does_not_prove": [
+  "a tight pool where one lane must reclaim another active lane pages",
+  "MTP/DFlash or vision under compact",
+  "CUDA Graph capture/replay under compact",
+  "bit-identical outputs between batch and single-lane decoding",
+  "cancellation of one lane, tool continuation under two lanes, or long-output recall beyond these fixtures"
+ ],
+ "candidate_note": "the two-lane 40K and dense-control rows below were measured on the previous candidate 0d34353f…; the final candidate adds a per-lane selection cap (pool/max_concurrency) that is inert for those windows",
+ "forced_batch_10k_candidate_sha256": "4cb99db1bdcc4e6c952d03830449ffea34152180f25062e4d893a5de6023ca7c"
+}

@@ -1,0 +1,88 @@
+{
+ "date": "2026-11-14",
+ "branch": "codex/kvmem-dual-lane",
+ "stage": "stage 4: single-lane DECODE compact execution view (NINFER_KV_COMPACT=1)",
+ "status": "decode compaction validated on one ordinary lane; dual lane, MTP, vision and CUDA Graphs are still gated off",
+ "candidate_engine_sha256": "f3770216f6929249daca795220362212c1ce447c23d01380347b9c65943c21a2",
+ "switch": {
+  "env": "NINFER_KV_COMPACT=1",
+  "default": "off; the daily mask path is unchanged",
+  "startup_gate": "requires KVMem retrieval, --max-concurrency 1, ordinary decode (no MTP/DFlash), no vision, --no-cuda-graph, generation Program",
+  "decode_only": "decode publishes a dense execution-table row over sink + retrieval + newest pages; cache positions are compact, RoPE/sample positions stay logical; prefill restores the logical row and the resident mask"
+ },
+ "build": {
+  "scope": "71 Host units recompiled; 11 CUDA objects reused after source checks; remaining static libraries retained after SHA-256 checks",
+  "clean_full_build": false,
+  "post_build_fixes": [
+   "compact ring preference excludes pages not yet mapped",
+   "logical-row restore publishes only Device-resident runs, so a Host-demoted page cannot make prefill throw",
+   "every non-decode mapping in compact mode republishes the logical row, including after a trim that cleared the state flag"
+  ]
+ },
+ "gpu_tests": {
+  "compact_view": {
+   "name": "ninfer_qwen3_5_kvmem_compact_view_test",
+   "exit_code": 0,
+   "pass_line": "PASS: compact execution view keeps selected pages in place, rewrites the table row, reclaims sole-owner pages, grows afterwards, and the non-destructive publication leaves the logical address and checkpoints intact"
+  },
+  "kvmem_matrix": "12/12 runs passed earlier in this build (4 cases x host/prefetch modes); the later fixes touch only the compact decode path"
+ },
+ "single_lane_no_pressure": {
+  "window_tokens": 32768,
+  "long_prompt_tokens": 20242,
+  "short_arms_equal": true,
+  "long_outputs_equal": true,
+  "long_needle_found": {
+   "mask": true,
+   "compact": true
+  },
+  "peak_gpu_mib": {
+   "mask": 10772,
+   "compact": 10772
+  }
+ },
+ "single_lane_pressure": {
+  "window_tokens": 19456,
+  "long_prompt_tokens": 40942,
+  "short_arms_equal": true,
+  "long_outputs_equal": true,
+  "long_needle_found": {
+   "mask": true,
+   "compact": true
+  },
+  "compact_switch_logged": true,
+  "compact_tail_error": false,
+  "peak_gpu_mib": {
+   "mask": 10774,
+   "compact": 10770
+  },
+  "note": "the needle sits between the sink and the newest window, so the compact arm must retrieve its page; both arms returned the code"
+ },
+ "daily_config_compact_off": {
+  "passed": true,
+  "scope": "single-lane CPU-vision profile, short greedy outputs only; no parallel Agent or long-context claim",
+  "daily_files_unchanged": true,
+  "message_equality": {
+   "short": true,
+   "follow": true,
+   "visual_boundary": true,
+   "prompt_tokens": true
+  },
+  "peak_gpu_mib": {
+   "baseline": 11238,
+   "candidate": 11234
+  },
+  "profile": "daily p0_rk4v4_daily with MTP3 and CPU vision, NINFER_KV_COMPACT unset"
+ },
+ "daily_engine_unchanged": {
+  "sha256": "f9a6b29cb7755b18ae02dcc130c17b5e28b2c97530c647db9936680bd5c2ad46",
+  "installed_engine_replaced": false,
+  "launch_or_config_changed": false
+ },
+ "does_not_prove": [
+  "two simultaneous requests, cross-lane page reclamation or batch decode",
+  "compact decode with MTP/DFlash or vision",
+  "compact decode with CUDA Graphs",
+  "arbitrary long-output/cancellation behavior beyond the fixed smoke fixtures"
+ ]
+}

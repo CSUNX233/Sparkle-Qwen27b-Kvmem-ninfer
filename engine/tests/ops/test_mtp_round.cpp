@@ -13,7 +13,7 @@ using namespace ninfer::test;
 
 namespace {
 
-int run_case(int k, int proposal_k, const std::vector<std::int32_t>& accepted) {
+int run_case(int k, int proposal_k, const std::vector<std::int32_t>& accepted, int removed = 0) {
     const int batch           = static_cast<int>(accepted.size());
     const int T               = k + 1;
     constexpr int max_context = 128;
@@ -21,6 +21,7 @@ int run_case(int k, int proposal_k, const std::vector<std::int32_t>& accepted) {
     std::vector<std::int32_t> verify(static_cast<std::size_t>(T * batch));
     std::vector<std::int32_t> anchors(static_cast<std::size_t>(batch));
     std::vector<std::int32_t> frontiers(static_cast<std::size_t>(batch));
+    std::vector<std::int32_t> logical_bases(static_cast<std::size_t>(batch));
     std::vector<std::int32_t> budgets(static_cast<std::size_t>(batch));
     std::vector<std::int32_t> licensed(static_cast<std::size_t>(batch));
     std::vector<std::int32_t> rope_deltas(static_cast<std::size_t>(batch));
@@ -34,9 +35,11 @@ int run_case(int k, int proposal_k, const std::vector<std::int32_t>& accepted) {
         anchors[static_cast<std::size_t>(b)]  = 90000 + 31 * b;
         licensed[static_cast<std::size_t>(b)] = accepted[static_cast<std::size_t>(b)] + 1;
         frontiers[static_cast<std::size_t>(b)] =
-            20 + 17 * b + licensed[static_cast<std::size_t>(b)];
+            20 + 17 * b;
+        logical_bases[static_cast<std::size_t>(b)] =
+            20 + 17 * b + removed + licensed[static_cast<std::size_t>(b)];
         budgets[static_cast<std::size_t>(b)] =
-            b == batch - 1 ? licensed[static_cast<std::size_t>(b)] : 12 - b;
+            removed != 0 ? 1000 : (b == batch - 1 ? licensed[static_cast<std::size_t>(b)] : 12 - b);
         rope_deltas[static_cast<std::size_t>(b)] = 3 * b - 2;
         for (int j = 0; j < T; ++j) {
             verify[static_cast<std::size_t>(b * T + j)] = 1000 + 101 * b + 7 * j;
@@ -50,14 +53,16 @@ int run_case(int k, int proposal_k, const std::vector<std::int32_t>& accepted) {
         const int budget_extent = std::max(
             budgets[static_cast<std::size_t>(b)] - licensed[static_cast<std::size_t>(b)] - 1, 0);
         const int context_extent =
-            std::max(max_context - frontiers[static_cast<std::size_t>(b)] - 1, 0);
+            std::max(max_context - logical_bases[static_cast<std::size_t>(b)] - 1, 0);
         expected_extents[static_cast<std::size_t>(b)] =
             std::min({proposal_k, budget_extent, context_extent});
         for (int s = 0; s < steps; ++s) {
             const std::size_t offset   = static_cast<std::size_t>(s * batch + b);
-            expected_positions[offset] = frontiers[static_cast<std::size_t>(b)] + s;
+            expected_positions[offset] = frontiers[static_cast<std::size_t>(b)] +
+                licensed[static_cast<std::size_t>(b)] + s;
             expected_rope_positions[offset] =
-                expected_positions[offset] + rope_deltas[static_cast<std::size_t>(b)];
+                20 + 17 * b + removed + licensed[static_cast<std::size_t>(b)] + s +
+                rope_deltas[static_cast<std::size_t>(b)];
             expected_valid[offset] = s + 1 < expected_extents[static_cast<std::size_t>(b)] ? 1 : 0;
         }
     }
@@ -66,6 +71,7 @@ int run_case(int k, int proposal_k, const std::vector<std::int32_t>& accepted) {
     DeviceBuffer d_anchors     = to_device(anchors);
     DeviceBuffer d_accepted    = to_device(accepted);
     DeviceBuffer d_frontiers   = to_device(frontiers);
+    DeviceBuffer d_logical_bases = to_device(logical_bases);
     DeviceBuffer d_budgets     = to_device(budgets);
     DeviceBuffer d_licensed    = to_device(licensed);
     DeviceBuffer d_rope_deltas = to_device(rope_deltas);
@@ -84,6 +90,7 @@ int run_case(int k, int proposal_k, const std::vector<std::int32_t>& accepted) {
     Tensor t_anchors(d_anchors.p, DType::I32, {batch});
     Tensor t_accepted(d_accepted.p, DType::I32, {batch});
     Tensor t_frontiers(d_frontiers.p, DType::I32, {batch});
+    Tensor t_logical_bases(d_logical_bases.p, DType::I32, {batch});
     Tensor t_budgets(d_budgets.p, DType::I32, {batch});
     Tensor t_licensed(d_licensed.p, DType::I32, {batch});
     Tensor t_rope_deltas(d_rope_deltas.p, DType::I32, {batch});
@@ -92,7 +99,7 @@ int run_case(int k, int proposal_k, const std::vector<std::int32_t>& accepted) {
     Tensor t_positions(d_positions.data(), DType::I32, {batch, steps});
     Tensor t_rope_positions(d_rope_positions.data(), DType::I32, {batch, steps});
     Tensor t_valid(d_valid.data(), DType::I32, {batch, steps});
-    ops::mtp_prepare_next_round(t_verify, t_anchors, t_accepted, t_frontiers, t_budgets, t_licensed,
+    ops::mtp_prepare_next_round(t_verify, t_anchors, t_accepted, t_frontiers, t_logical_bases, t_budgets, t_licensed,
                                 t_rope_deltas, t_alignment, t_extents, t_positions,
                                 t_rope_positions, t_valid, proposal_k, max_context, nullptr);
     cuda_synchronize();
@@ -103,7 +110,7 @@ int run_case(int k, int proposal_k, const std::vector<std::int32_t>& accepted) {
         for (const int invalid_limit : {-1, 0, 16}) {
             bool rejected = false;
             try {
-                ops::mtp_prepare_next_round(t_verify, t_anchors, t_accepted, t_frontiers, t_budgets,
+                ops::mtp_prepare_next_round(t_verify, t_anchors, t_accepted, t_frontiers, t_logical_bases, t_budgets,
                                             t_licensed, t_rope_deltas, t_alignment, t_extents,
                                             t_positions, t_rope_positions, t_valid, invalid_limit,
                                             max_context, nullptr);
@@ -115,7 +122,7 @@ int run_case(int k, int proposal_k, const std::vector<std::int32_t>& accepted) {
             invalid.ne[0] = invalid_width;
             bool rejected = false;
             try {
-                ops::mtp_prepare_next_round(invalid, t_anchors, t_accepted, t_frontiers, t_budgets,
+                ops::mtp_prepare_next_round(invalid, t_anchors, t_accepted, t_frontiers, t_logical_bases, t_budgets,
                                             t_licensed, t_rope_deltas, t_alignment, t_extents,
                                             t_positions, t_rope_positions, t_valid, proposal_k,
                                             max_context, nullptr);
@@ -153,13 +160,21 @@ int run_case(int k, int proposal_k, const std::vector<std::int32_t>& accepted) {
 
 } // namespace
 
-int main() {
+int main(int argc, char**) {
     if (cuda_unavailable()) {
         std::cout << "mtp_round: SKIP (CUDA unavailable)\n";
         return 77;
     }
 
     int failures = 0;
+    for (int gap : {0, 64, 96}) {
+        failures += run_case(3, 3, {0, 1, 3}, gap);
+        failures += run_case(15, 15, {0, 7, 15}, gap);
+    }
+    if (argc > 1) {
+        std::cout << "mtp_round compact oracle: " << (failures ? "FAIL" : "PASS") << '\n';
+        return failures ? 1 : 0;
+    }
     failures += run_case(1, 1, {0});
     failures += run_case(5, 5, {0, 2, 5});
     failures += run_case(15, 15, {0, 7, 15});

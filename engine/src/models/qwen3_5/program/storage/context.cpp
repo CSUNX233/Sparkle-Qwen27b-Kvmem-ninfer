@@ -3,6 +3,7 @@
 #include "models/qwen3_5/program/context_work.h"
 #include "models/qwen3_5/program/storage/ring_host_pressure.h"
 #include "models/qwen3_5/program/storage/ring_demote.h"
+#include "models/qwen3_5/program/storage/compact_selection.h"
 #include "core/device.h"
 // LOCAL (KVMem content scoring): the published content ranking consumed by select_retrieval_pages.
 #include "ops/kvmem/kvmem_score.h"
@@ -56,13 +57,15 @@ void kv_audit_selection(const SequenceState& sequence, std::uint32_t span_pages,
                         const KVAddressSpaceStore& addresses, const LogicalKVPageStore& pages,
                         std::span<const std::uint32_t> preferred,
                         std::span<const std::uint32_t> installed_bits,
-                        const HostKVArena* arena, std::uint64_t generation) {
+                        const HostKVArena* arena, std::uint64_t generation,
+                        const char* phase = "") {
     const char* directory = kv_audit_directory();
     if (directory == nullptr || !sequence.kv) { return; }
     // A diagnostic I/O failure must not change serving success or selection.
     try {
         const auto base = std::filesystem::path(directory) /
-            ("selection-" + std::to_string(sequence.lane) + "-" + std::to_string(generation));
+            ("selection-" + std::to_string(sequence.lane) + "-" + std::to_string(generation) + phase);
+        if (phase[0] != '\0' && std::filesystem::exists(base.string() + ".txt")) { return; }
         std::ofstream ledger(base.string() + ".i32", std::ios::binary | std::ios::trunc);
         static_assert(sizeof(TokenId) == 4);
         ledger.write(reinterpret_cast<const char*>(sequence.ledger.data()),
@@ -1670,15 +1673,24 @@ void ProgramImpl::resize_sequence_kv_entitlement(SequenceState& sequence, std::u
     }
 }
 
-void ProgramImpl::bind_retrieval_workspace() noexcept {
-    ops::raw_k_shadow_harvest_bind(&retrieval_harvest);
-    ops::mean_k_index_bind(&retrieval_index);
-    ops::detail::kvmem_score_bind(&retrieval_probe);
+ops::RetrievalWorkspace& ProgramImpl::retrieval_workspace_for_lane(std::uint32_t lane) {
+    if (lane >= retrieval_workspaces.size() || !retrieval_workspaces[lane]) {
+        throw std::out_of_range("retrieval workspace lane is out of range");
+    }
+    return *retrieval_workspaces[lane];
 }
 
-RetrievalCheckpoint ProgramImpl::capture_retrieval() {
+void ProgramImpl::bind_retrieval_workspace(std::uint32_t lane) {
+    // Every lane borrows the one staging buffer: its address is baked into the
+    // captured decode graphs, which serve whichever lane is active.
+    retrieval_workspace_for_lane(lane).bind_with_harvest(retrieval_harvest_staging);
+}
+
+RetrievalCheckpoint ProgramImpl::capture_retrieval(std::uint32_t lane) {
     if (!ops::detail::kvmem_score_enabled()) { return {}; }
-    bind_retrieval_workspace();
+    bind_retrieval_workspace(lane);
+    auto& retrieval_probe = retrieval_workspace_for_lane(lane).probe;
+    auto& retrieval_index = retrieval_workspace_for_lane(lane).index;
     retrieval_probe.drain_readback();
     auto out = std::make_shared<ops::detail::KvMemContextSnapshot>();
     if (retrieval_index) { out->index = retrieval_index->snapshot(device.stream); }
@@ -1693,9 +1705,11 @@ RetrievalCheckpoint ProgramImpl::capture_retrieval() {
     return out;
 }
 
-void ProgramImpl::restore_retrieval(const RetrievalCheckpoint& checkpoint) {
+void ProgramImpl::restore_retrieval(std::uint32_t lane, const RetrievalCheckpoint& checkpoint) {
     if (!ops::detail::kvmem_score_enabled()) { return; }
-    bind_retrieval_workspace();
+    bind_retrieval_workspace(lane);
+    auto& retrieval_probe = retrieval_workspace_for_lane(lane).probe;
+    auto& retrieval_index = retrieval_workspace_for_lane(lane).index;
     retrieval_probe.drain_readback();
     if (retrieval_index) { retrieval_index->restore(checkpoint ? checkpoint->index : nullptr, device.stream); }
     else if (checkpoint && checkpoint->index) {
@@ -1728,7 +1742,7 @@ RetrievalCheckpoint ProgramImpl::selected_retrieval(const SequenceState& sequenc
 }
 
 void ProgramImpl::bind_sequence_kv(SequenceState& sequence) {
-    bind_retrieval_workspace();
+    bind_retrieval_workspace(sequence.lane);
     if (!sequence.kv) { throw std::logic_error("KV allocation bundle is unavailable"); }
     const std::int32_t row = static_cast<std::int32_t>(sequence.lane);
     const bool text_active = text_kv_addresses->active(sequence.kv->text);
@@ -2013,7 +2027,8 @@ std::uint32_t ProgramImpl::demote_kv_pages_to_host(KVAddressSpaceStore& addresse
                                                    const KVAddressSpaceHandle& address,
                                                    std::uint32_t sink_pages,
                                                    std::uint32_t target_free,
-                                                   std::span<const std::uint32_t> preferred) {
+                                                   std::span<const std::uint32_t> preferred,
+                                                   bool preserve_selected) {
     if (host_kv_extents == nullptr || !addresses.valid(address) || target_free == 0) { return 0; }
     // C2.1 opt-in; one page retains the earlier transfer granularity for A/B checks.
     static const std::uint32_t batch_limit = [] {
@@ -2028,7 +2043,8 @@ std::uint32_t ProgramImpl::demote_kv_pages_to_host(KVAddressSpaceStore& addresse
     static thread_local RingDemoteStats stats;
     static thread_local std::uint64_t calls = 0;
     const auto freed = demote_ring_pages(addresses, pages, address, *host_kv_extents,
-        device.stream, sink_pages, target_free, preferred, batch_limit, report ? &stats : nullptr);
+        device.stream, sink_pages, target_free, preferred, batch_limit, report ? &stats : nullptr,
+        preserve_selected);
     if (report && (++calls == 1 || calls % 1024 == 0)) {
         std::fprintf(stderr, "[ring-demote] batch_limit=%u calls=%llu copied_pages=%u copy_batches=%u last_freed=%u\n",
             batch_limit, static_cast<unsigned long long>(calls), stats.copied_pages,
@@ -2130,6 +2146,17 @@ void install_resident_selection(qwen3_5::PagedKVCache* cache, std::uint32_t span
     }
     cache->install_selection(bits);
     if (audit_bits != nullptr) { *audit_bits = std::move(bits); }
+}
+
+// NINFER_KV_COMPACT: the decode row is already a dense prefix of selected pages, so the
+// mask must select EVERY compact page. The bitmap length is capped by the cache's
+// startup all-ones buffer, so the device pointer baked into captured graphs (if graphs
+// are ever enabled) stays stable.
+void install_full_selection(qwen3_5::PagedKVCache* cache, std::uint32_t span_pages) {
+    if (cache == nullptr || span_pages == 0) { return; }
+    const std::size_t words = (static_cast<std::size_t>(span_pages) + 31U) / 32U;
+    std::vector<std::uint32_t> bits(words, ~0U);
+    cache->install_selection(bits);
 }
 } // namespace
 
@@ -2353,8 +2380,17 @@ ProgramImpl::retained_device_kv_pages(const SharedPrefixHandle& shared) const no
     } catch (...) { return {}; }
 }
 
+std::uint32_t ProgramImpl::compact_position(const SequenceState& sequence,
+                                            std::uint32_t logical) const {
+    if (!sequence.compact_view_valid) { return logical; }
+    if (logical < sequence.compact_removed_tokens) {
+        throw std::logic_error("KV position precedes the compact decode view");
+    }
+    return logical - sequence.compact_removed_tokens;
+}
+
 void ProgramImpl::ensure_sequence_kv_mapped(SequenceState& sequence, std::uint32_t main_tokens,
-                                            std::uint32_t backend_tokens) {
+                                            std::uint32_t backend_tokens, bool decode_round) {
     if (!sequence.kv || main_tokens > capacity || backend_tokens > capacity) {
         throw std::logic_error("KV materialization request is outside the sequence bundle");
     }
@@ -2367,8 +2403,9 @@ void ProgramImpl::ensure_sequence_kv_mapped(SequenceState& sequence, std::uint32
     // beat; master's lease accounting is untouched. Kept FIRST because master ran it before any
     // mapping and because the beats below consume what it decides (beat 1 scores over the mapped
     // range, ring_one computes need = total - mapped, beat 3 maps into the entitlement it sized).
-    bind_retrieval_workspace();
+    bind_retrieval_workspace(sequence.lane);
     ensure_sequence_kv_lease(sequence, main_tokens, backend_tokens);
+    auto& retrieval_probe = retrieval_workspace_for_lane(sequence.lane).probe;
     // LOCAL PROTOTYPE (KVMem-style ring): when a Device pool is smaller than the logical context a
     // sequence cannot keep all of its KV on the Device. Each call then:
     //   1. ranks the pages by relevance to the recent context (retrieval preference),
@@ -2387,7 +2424,16 @@ void ProgramImpl::ensure_sequence_kv_mapped(SequenceState& sequence, std::uint32
     const bool ring = window_pages != 0 && text_kv_pages != nullptr && text_kv_addresses != nullptr &&
                       text_kv_pages->physical_pool().usable_pages() <
                           text_kv_addresses->logical_page_capacity();
+    // NINFER_KV_COMPACT: only a DECODE round publishes the dense row. Prefill and every
+    // restore path keep the logical row + resident mask.
+    const bool compact_decode =
+        decode_round && ring && ops::detail::kvmem_compact_enabled() &&
+        (!has_backend || speculative_backend == SpeculativeBackend::Mtp);
     std::vector<std::uint32_t> preferred;
+    std::vector<std::uint32_t> compact_selected;
+    std::vector<std::uint32_t> compact_ring_prefer;
+    std::vector<std::uint32_t> backend_selected;
+    std::vector<std::uint32_t> backend_ring_prefer;
     static thread_local const ProgramImpl* audited_program = nullptr;
     static thread_local std::uint64_t audited_generation = 0;
     const bool audit_selection = ring && kv_audit_directory() != nullptr &&
@@ -2398,6 +2444,10 @@ void ProgramImpl::ensure_sequence_kv_mapped(SequenceState& sequence, std::uint32
         // Keep a few pages of slack so the pool never runs at exactly 100%: the restore path always
         // needs a free Device page to work with.
         constexpr std::uint32_t kRingSlackPages = 8U;
+        static const bool reclaim_host_duplicates = [] {
+            const char* value = std::getenv("NINFER_KV_HOST_DUPLICATE_RECLAIM");
+            return value == nullptr || std::strcmp(value, "0") != 0;
+        }();
         const auto free_pages = [](const LogicalKVPageStore& store) {
             const std::uint32_t usable = store.physical_pool().usable_pages();
             const std::uint32_t allocated = store.physical_pool().allocated_pages();
@@ -2417,6 +2467,37 @@ void ProgramImpl::ensure_sequence_kv_mapped(SequenceState& sequence, std::uint32
                 }
             }
             const std::uint32_t want_free = need + kRingSlackPages + wanted_extra;
+            if (ops::detail::kvmem_compact_enabled() && max_concurrency > 1 &&
+                (need != 0 || wanted_extra != 0)) {
+                // A selected-row cap alone does not reserve space for the other lane:
+                // one long prefill could otherwise retain the entire physical pool.
+                std::uint64_t resident = 0;
+                for (std::uint32_t page = 0; page < mapped; ++page) {
+                    const auto logical = addresses.logical_page(address, page);
+                    if (pages.device_resident(logical)) { ++resident; }
+                }
+                const auto share = pages.physical_pool().usable_pages() / max_concurrency;
+                const auto requested = resident + want_free;
+                if (requested > share) {
+                    const auto target = static_cast<std::uint32_t>(requested - share);
+                    auto freed = demote_kv_pages_to_host(addresses, pages, address,
+                        sink_pages, target, prefer, compact_decode);
+                    while (freed < target && reclaim_host_duplicates &&
+                           !has_context_transaction() && host_kv_arena && host_kv_extents) {
+                        const auto reclaimed = reclaim_ring_host_duplicates(device, addresses,
+                            pages, *host_kv_extents, target - freed);
+                        if (reclaimed == 0) { break; }
+                        advance_resource_revision();
+                        freed += demote_kv_pages_to_host(addresses, pages, address,
+                            sink_pages, target - freed, prefer, compact_decode);
+                    }
+                    if (freed < target) {
+                        throw std::runtime_error(
+                            "compact lane cannot release its own cold pages; other ACTIVE "
+                            "lanes and configured quality budgets were preserved");
+                    }
+                }
+            }
             const std::uint32_t free_now  = free_pages(pages);
             const std::uint32_t target_free = want_free > free_now ? want_free - free_now : 0U;
             if (target_free != 0) {
@@ -2426,14 +2507,10 @@ void ProgramImpl::ensure_sequence_kv_mapped(SequenceState& sequence, std::uint32
                 const std::uint32_t free_after = free_pages(pages);
                 const std::uint32_t target2 = want_free > free_after ? want_free - free_after : 0U;
                 (void)demote_kv_pages_to_host(addresses, pages, address, sink_pages, target2,
-                                              prefer);
+                                              prefer, compact_decode);
                 // A restored Device page may still occupy Host. A full Host arena therefore
                 // does not imply that the logical histories exceed the combined tier budget.
                 // Keep all histories and cache owners; reclaim only redundant Host replicas.
-                static const bool reclaim_host_duplicates = [] {
-                    const char* value = std::getenv("NINFER_KV_HOST_DUPLICATE_RECLAIM");
-                    return value == nullptr || std::strcmp(value, "0") != 0;
-                }();
                 while (free_pages(pages) < want_free && host_kv_arena && host_kv_extents &&
                        !host_kv_arena->can_allocate(host_kv_extents->page_layout(pages), 1U)) {
                     const std::size_t host_before = host_kv_arena->occupied_bytes();
@@ -2455,7 +2532,7 @@ void ProgramImpl::ensure_sequence_kv_mapped(SequenceState& sequence, std::uint32
                                                          want_free - free_pages(pages));
                     if (free_pages(pages) < want_free) {
                         (void)demote_kv_pages_to_host(addresses, pages, address, sink_pages,
-                                                      want_free - free_pages(pages), prefer);
+                                                      want_free - free_pages(pages), prefer, compact_decode);
                     }
                 }
                 if (kv_audit_directory() != nullptr && free_pages(pages) < need) {
@@ -2475,7 +2552,9 @@ void ProgramImpl::ensure_sequence_kv_mapped(SequenceState& sequence, std::uint32
         // Scoring runs only when the mapped page count changed (relevance shifts slowly; within one
         // page the previous selection stays valid). Between rescores the hysteresis set is reused.
         const std::uint32_t pool   = text_kv_pages->physical_pool().usable_pages();
-        const std::uint32_t budget = std::min(proto_kv_retrieve_pages(), pool / 4U);
+        const std::uint32_t budget = ops::detail::kvmem_compact_enabled()
+            ? proto_kv_retrieve_pages()
+            : std::min(proto_kv_retrieve_pages(), pool / 4U);
         const std::uint32_t mapped_now = text_kv_addresses->mapped_pages(sequence.kv->text);
         if (budget != 0 && mapped_now > sink_pages &&
             (mapped_now != sequence.ring_scored_mapped || sequence.ring_keep.empty() ||
@@ -2497,10 +2576,77 @@ void ProgramImpl::ensure_sequence_kv_mapped(SequenceState& sequence, std::uint32
         preferred.erase(std::remove_if(preferred.begin(), preferred.end(),
                                        [&](std::uint32_t page) { return page >= mapped_now; }),
                         preferred.end());
-        ring_one(*text_kv_addresses, *text_kv_pages, sequence.kv->text, text_total, preferred);
+        // Preserve independent sink/recent/retrieval budgets and the complete pending
+        // write suffix. A partial old tail can precede the new tail in an MTP round.
+        if (compact_decode && text_total != 0) {
+            const auto committed = has_backend
+                ? std::min(sequence.text_kv_valid, sequence.mtp_kv_valid)
+                : sequence.text_kv_valid;
+            compact_selected = compact_selection(text_total, std::min(committed, main_tokens),
+                static_cast<std::uint32_t>(kPagedKVPageSize), sink_pages, window_pages, preferred);
+            require_compact_lane_capacity(compact_selected.size(),
+                text_kv_pages->physical_pool().usable_pages(), max_concurrency);
+            auto selected_capacity = text_kv_pages->physical_pool().usable_pages() /
+                max_concurrency - kRingSlackPages;
+            if (has_backend) {
+                const auto backend_share = backend_kv_pages->physical_pool().usable_pages() /
+                    max_concurrency;
+                const auto extra = backend_total > text_total ? backend_total - text_total : 0U;
+                const auto text_only = static_cast<std::uint32_t>(std::count_if(
+                    compact_selected.begin(), compact_selected.end(),
+                    [&](auto page) { return page >= backend_total; }));
+                const auto backend_capacity = backend_share > kRingSlackPages + extra
+                    ? backend_share - kRingSlackPages - extra + text_only : 0U;
+                selected_capacity = std::min(selected_capacity, backend_capacity);
+            }
+            std::vector<std::uint32_t> resident;
+            for (std::uint32_t page = 0; page < std::min(mapped_now, text_total); ++page) {
+                const auto logical = text_kv_addresses->logical_page(sequence.kv->text, page);
+                if (text_kv_pages->device_resident(logical) &&
+                    text_kv_pages->committed_columns(logical) ==
+                        static_cast<std::uint32_t>(kPagedKVPageSize)) {
+                    resident.push_back(page);
+                }
+            }
+            fill_compact_resident(compact_selected, resident, selected_capacity);
+        }
+        // The MTP cache mirrors the text prefix and appends the contiguous pages after the
+        // text tail. Whole-page holes keep `logical - removed_tokens` valid for both views.
+        if (compact_decode && has_backend && backend_total != 0) {
+            for (const auto page : compact_selected) {
+                if (page < backend_total) { backend_selected.push_back(page); }
+            }
+            for (std::uint32_t page = text_total; page < backend_total; ++page) {
+                backend_selected.push_back(page);
+            }
+            require_compact_lane_capacity(backend_selected.size(),
+                backend_kv_pages->physical_pool().usable_pages(), max_concurrency);
+            std::sort(backend_selected.begin(), backend_selected.end());
+            const std::uint32_t backend_mapped =
+                backend_kv_addresses->mapped_pages(*sequence.kv->backend);
+            for (const std::uint32_t page : backend_selected) {
+                if (page < backend_mapped) { backend_ring_prefer.push_back(page); }
+            }
+        }
+        // ring_one may only look up pages that are already members; the tail page can be
+        // new in this round. The post-mapping compact view uses the full set.
+        compact_ring_prefer.clear();
+        compact_ring_prefer.reserve(compact_selected.size());
+        for (const std::uint32_t page : compact_selected) {
+            if (page < mapped_now) { compact_ring_prefer.push_back(page); }
+        }
+        const std::span<const std::uint32_t> ring_prefer =
+            compact_selected.empty()
+                ? std::span<const std::uint32_t>(preferred)
+                : std::span<const std::uint32_t>(compact_ring_prefer);
+        ring_one(*text_kv_addresses, *text_kv_pages, sequence.kv->text, text_total, ring_prefer);
         if (has_backend) {
+            const std::span<const std::uint32_t> backend_prefer =
+                !backend_selected.empty()
+                    ? std::span<const std::uint32_t>(backend_ring_prefer)
+                    : std::span<const std::uint32_t>();
             ring_one(*backend_kv_addresses, *backend_kv_pages, *sequence.kv->backend, backend_total,
-                     {});
+                     backend_prefer);
         }
     }
     text_kv_addresses->ensure_mapped_to_tokens(sequence.kv->text, main_tokens, device.stream);
@@ -2509,23 +2655,127 @@ void ProgramImpl::ensure_sequence_kv_mapped(SequenceState& sequence, std::uint32
                                                       device.stream);
     }
     if (ring) {
-        (void)restore_kv_pages_from_host(*text_kv_addresses, *text_kv_pages, sequence.kv->text,
-                                        preferred);
-        // The mask IS the resident set, so a page that could not be demoted or restored can only be
-        // hidden; it can never expose a stale Device slot.
-        std::vector<std::uint32_t> audit_bits;
-        install_resident_selection(decoder ? &decoder->text_kv : nullptr, text_total,
-                                   *text_kv_addresses, *text_kv_pages, sequence.kv->text,
-                                   audit_selection ? &audit_bits : nullptr);
-        if (audit_selection && !audit_bits.empty()) {
-            kv_audit_selection(sequence, text_total, *text_kv_addresses, *text_kv_pages, preferred,
-                               audit_bits, host_kv_arena.get(), retrieval_probe.generation);
-            audited_program = this;
-            audited_generation = retrieval_probe.generation;
-        }
-        if (has_backend) {
-            install_resident_selection(backend_kv_cache(), backend_total, *backend_kv_addresses,
-                                       *backend_kv_pages, *sequence.kv->backend);
+        if (compact_decode && !compact_selected.empty()) {
+            const bool first_compact_view = !sequence.compact_view_valid;
+            // Restore every selected page (not just the retrieval preference): the compact
+            // row addresses exactly this set. Pages that cannot be restored drop out; the
+            // current tail must survive, because this round writes into it.
+            (void)restore_kv_pages_from_host(*text_kv_addresses, *text_kv_pages,
+                                             sequence.kv->text, compact_selected);
+            std::vector<std::uint32_t> visible;
+            visible.reserve(compact_selected.size());
+            for (const std::uint32_t page : compact_selected) {
+                const LogicalKVPageHandle logical =
+                    text_kv_addresses->logical_page(sequence.kv->text, page);
+                if (text_kv_pages->device_resident(logical)) {
+                    visible.push_back(page);
+                } else {
+                    throw std::logic_error("compact view could not restore its full quality budget");
+                }
+            }
+            const std::uint32_t tail_page = text_total - 1;
+            if (visible.empty() || visible.back() != tail_page) {
+                throw std::logic_error("compact decode view lost its tail page");
+            }
+            const std::uint32_t tail_columns =
+                main_tokens - tail_page * static_cast<std::uint32_t>(kPagedKVPageSize);
+            const std::uint32_t visible_tokens =
+                static_cast<std::uint32_t>(kPagedKVPageSize) *
+                    (static_cast<std::uint32_t>(visible.size()) - 1U) +
+                tail_columns;
+            // The target verification writes `extent + 1` uncommitted columns in one
+            // round; ordinary decode writes one. The tail page must be allowed to lack
+            // exactly those columns.
+            const std::uint32_t text_pending =
+                main_tokens > sequence.text_kv_valid ? main_tokens - sequence.text_kv_valid : 0U;
+            text_kv_addresses->publish_compact_view(sequence.kv->text, visible, visible_tokens,
+                                                    device.stream, text_pending);
+            sequence.compact_pages          = visible;
+            sequence.compact_visible_tokens = visible_tokens;
+            sequence.compact_removed_tokens = main_tokens - visible_tokens;
+            sequence.compact_view_valid     = true;
+            if (first_compact_view && kv_audit_directory() != nullptr) {
+                std::vector<std::uint32_t> bits((text_total + 31U) / 32U, 0U);
+                for (auto page : visible) { bits[page >> 5U] |= 1U << (page & 31U); }
+                kv_audit_selection(sequence, text_total, *text_kv_addresses, *text_kv_pages,
+                    preferred, bits, host_kv_arena.get(), retrieval_probe.generation, "-compact");
+            }
+            // The compact row already hides every unselected page; the mask must select the
+            // whole cache. Installing over the full logical span (not just this lane's
+            // prefix) keeps the shared bitmap all-ones for every lane in a batch.
+            install_full_selection(decoder ? &decoder->text_kv : nullptr,
+                                   text_kv_addresses->logical_page_capacity());
+            kv_trace_head("attn-compact", *text_kv_addresses, *text_kv_pages, sequence.kv->text,
+                          text_total);
+            if (has_backend) {
+                auto& backend_address = *sequence.kv->backend;
+                (void)restore_kv_pages_from_host(*backend_kv_addresses, *backend_kv_pages,
+                                                 backend_address, backend_selected);
+                std::vector<std::uint32_t> backend_visible;
+                backend_visible.reserve(backend_selected.size());
+                for (const std::uint32_t page : backend_selected) {
+                    const LogicalKVPageHandle logical =
+                        backend_kv_addresses->logical_page(backend_address, page);
+                    if (!backend_kv_pages->device_resident(logical)) {
+                        throw std::logic_error("compact MTP view lost a selected page");
+                    }
+                    backend_visible.push_back(page);
+                }
+                const std::uint32_t backend_tail = backend_total - 1;
+                if (backend_visible.empty() || backend_visible.back() != backend_tail) {
+                    throw std::logic_error("compact MTP view lost its tail page");
+                }
+                const std::uint32_t backend_tail_columns =
+                    backend_tokens -
+                    backend_tail * static_cast<std::uint32_t>(kPagedKVPageSize);
+                const std::uint32_t backend_visible_tokens =
+                    static_cast<std::uint32_t>(kPagedKVPageSize) *
+                        (static_cast<std::uint32_t>(backend_visible.size()) - 1U) +
+                    backend_tail_columns;
+                const std::uint32_t backend_pending =
+                    backend_tokens > sequence.mtp_kv_valid
+                        ? backend_tokens - sequence.mtp_kv_valid
+                        : 0U;
+                backend_kv_addresses->publish_compact_view(
+                    backend_address, backend_visible, backend_visible_tokens, device.stream,
+                    backend_pending);
+                install_full_selection(decoder ? decoder->mtp_cache() : nullptr,
+                                       backend_kv_addresses->logical_page_capacity());
+            }
+        } else {
+            // Prefill/restore addresses KV in logical coordinates. Republish the logical
+            // row unconditionally: a decode compact row (or a trim that only cleared the
+            // state flag) may still be in the device table.
+            if (ops::detail::kvmem_compact_enabled() && ring) {
+                text_kv_addresses->publish_logical_view(sequence.kv->text, device.stream);
+                if (has_backend) {
+                    backend_kv_addresses->publish_logical_view(*sequence.kv->backend, device.stream);
+                }
+                sequence.compact_pages.clear();
+                sequence.compact_visible_tokens = 0;
+                sequence.compact_removed_tokens = 0;
+                sequence.compact_view_valid     = false;
+            }
+            (void)restore_kv_pages_from_host(*text_kv_addresses, *text_kv_pages, sequence.kv->text,
+                                             preferred);
+            // The mask IS the resident set, so a page that could not be demoted or restored can
+            // only be hidden; it can never expose a stale Device slot.
+            std::vector<std::uint32_t> audit_bits;
+            install_resident_selection(decoder ? &decoder->text_kv : nullptr, text_total,
+                                       *text_kv_addresses, *text_kv_pages, sequence.kv->text,
+                                       audit_selection ? &audit_bits : nullptr);
+            if (audit_selection && !audit_bits.empty()) {
+                kv_audit_selection(sequence, text_total, *text_kv_addresses, *text_kv_pages,
+                                   preferred, audit_bits, host_kv_arena.get(),
+                                   retrieval_probe.generation);
+                audited_program = this;
+                audited_generation = retrieval_probe.generation;
+            }
+            if (has_backend) {
+                install_resident_selection(backend_kv_cache(), backend_total,
+                                           *backend_kv_addresses, *backend_kv_pages,
+                                           *sequence.kv->backend);
+            }
         }
         kv_trace_head("attn", *text_kv_addresses, *text_kv_pages, sequence.kv->text, text_total);
     }
@@ -2573,6 +2823,11 @@ void ProgramImpl::trim_sequence_kv(SequenceState& sequence, std::uint32_t main_t
     if (backend_tokens != 0 && !sequence.kv->backend) {
         throw std::logic_error("backend KV trim requested without an allocation");
     }
+    // A rewind changes the logical frontier, so any decode compact row is stale.
+    sequence.compact_pages.clear();
+    sequence.compact_visible_tokens = 0;
+    sequence.compact_removed_tokens = 0;
+    sequence.compact_view_valid     = false;
     text_kv_addresses->destructive_truncate(sequence.kv->text, main_tokens);
     if (sequence.kv->backend) {
         backend_kv_addresses->destructive_truncate(*sequence.kv->backend, backend_tokens);
@@ -2675,6 +2930,10 @@ void ProgramImpl::ordered_reset(SequenceState& sequence) {
     sequence.text_kv_valid           = 0;
     sequence.mtp_kv_valid            = 0;
     sequence.dflash_context_frontier = 0;
+    sequence.compact_pages.clear();
+    sequence.compact_visible_tokens = 0;
+    sequence.compact_removed_tokens = 0;
+    sequence.compact_view_valid     = false;
 }
 
 

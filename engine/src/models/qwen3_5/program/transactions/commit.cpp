@@ -196,6 +196,13 @@ PendingBatch ProgramImpl::decode(std::span<const SequenceHandle> members,
         }
         lanes[row] = lane;
     }
+    if (ops::detail::kvmem_compact_enabled() && members.size() > 1) {
+        static thread_local std::size_t widest_compact_batch = 0;
+        if (members.size() > widest_compact_batch) {
+            widest_compact_batch = members.size();
+            std::fprintf(stderr, "[kvmem] compact batch decode rows=%zu\n", members.size());
+        }
+    }
     const auto lane_span = std::span<const std::uint32_t>(lanes.data(), members.size());
     try {
         runtime::BatchedGeneratedRound round = decode_raw(lane_span, budgets, failed_timing);
@@ -681,7 +688,7 @@ bool ProgramImpl::publish_active_continuation(SequenceState& state, RequestContr
         } else if (state_store->role(state.state.read) != StateImageRole::CheckpointImmutable) {
             return false;
         }
-        state.retrieval = capture_retrieval();
+        state.retrieval = capture_retrieval(lane);
         state.endpoint_valid = true;
         refresh_state_views(state);
         text_kv_addresses->set_checkpoint_requirement(state.kv->text, state.execution_frontier);

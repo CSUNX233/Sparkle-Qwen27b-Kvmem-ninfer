@@ -22,7 +22,7 @@ inline std::uint32_t demote_ring_pages(
     const KVAddressSpaceHandle& address, HostKVExtentStore& extents, RankStreams streams,
     std::uint32_t sink_pages, std::uint32_t target_free,
     std::span<const std::uint32_t> preferred, std::uint32_t batch_limit,
-    RingDemoteStats* stats = nullptr) {
+    RingDemoteStats* stats = nullptr, bool preserve_preferred = false) {
     if (!addresses.valid(address) || target_free == 0) { return 0; }
     batch_limit = std::clamp(batch_limit, 1U, 64U);
     const std::uint32_t mapped = addresses.mapped_pages(address);
@@ -61,7 +61,7 @@ inline std::uint32_t demote_ring_pages(
         return true;
     };
 
-    for (unsigned pass = 0; pass < 2 && demoted < target_free; ++pass) {
+    for (unsigned pass = 0; pass < (preserve_preferred ? 1U : 2U) && demoted < target_free; ++pass) {
         for (std::uint32_t index = sink_pages;
              index < mapped && demoted + batch.size() < target_free; ++index) {
             if (pass == 0 && std::binary_search(preferred.begin(), preferred.end(), index)) {
@@ -69,6 +69,7 @@ inline std::uint32_t demote_ring_pages(
             }
             const auto logical = addresses.logical_page(address, index);
             if (!pages.valid(logical) || !pages.device_resident(logical) ||
+                pages.active_address_references(logical) > 1U ||
                 pages.source_pins(logical) != 0 ||
                 pages.committed_columns(logical) != static_cast<std::uint32_t>(kPagedKVPageSize)) {
                 continue;

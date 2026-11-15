@@ -1857,6 +1857,180 @@ public:
         address.committed_frontier = frontier;
     }
 
+    // Rebuild this ACTIVE address as a DENSE COMPACT view of `selected`: compact slot i
+    // maps to selected[i]'s existing logical page, so attention reads one contiguous
+    // prefix and needs no retrieval mask. This is the execution-view model of the
+    // upstream KVMem/NInfer port (KvmemWindowState.pages / ExecutionView), except that
+    // no KV bytes move: only membership references and the execution table row change.
+    //
+    // `visible_tokens` is the COMPACT frontier. Every selected page must already be
+    // Device-resident and a current member of this address; the last page must cover
+    // the partial tail. The caller keeps the original logical positions for RoPE:
+    // compaction only changes where a key lives, never the position it was rotated at.
+    //
+    // Effects: selected pages are retained; unselected members release this address's
+    // reference and are dematerialized only when no other address, pin or Host replica
+    // holds them. Checkpoint coverage is cleared because a page's slot identity moves;
+    // a caller that needs a checkpoint must re-establish it after the rebuild.
+    //
+    // RESTRICTION (first cut): a selected page must currently be a member of THIS
+    // address. Pulling a page back from the Host archive is the caller's restore step;
+    // extending this to archived pages is the next step of the compaction port.
+    void rebuild_compact(KVAddressSpaceHandle handle,
+                         std::span<const LogicalKVPageHandle> selected,
+                         std::uint32_t visible_tokens, RankStreams stream = {}) {
+        Address& address          = require_active(handle);
+        constexpr std::uint32_t page_size =
+            static_cast<std::uint32_t>(kPagedKVPageSize);
+        const auto count = static_cast<std::uint32_t>(selected.size());
+        if (selected.empty() || visible_tokens == 0 || count > entitlement(address) ||
+            count > page_capacity_ ||
+            static_cast<std::uint64_t>(visible_tokens) >
+                static_cast<std::uint64_t>(count) * page_size ||
+            visible_tokens <= (count - 1U) * page_size) {
+            throw std::invalid_argument("KV compact rebuild geometry is invalid");
+        }
+        for (std::size_t index = 0; index < selected.size(); ++index) {
+            const LogicalKVPageHandle page = selected[index];
+            if (!pages_->valid(page) || !pages_->device_resident(page)) {
+                throw std::invalid_argument(
+                    "KV compact rebuild requires a Device-resident selected page");
+            }
+            if (std::find(selected.begin(),
+                          selected.begin() + static_cast<std::ptrdiff_t>(index),
+                          page) != selected.begin() + static_cast<std::ptrdiff_t>(index)) {
+                throw std::invalid_argument("KV compact rebuild repeats a selected page");
+            }
+            bool member = false;
+            for (std::uint32_t slot = 0; slot < address.page_count && !member; ++slot) {
+                member = membership(address, slot) == page;
+            }
+            if (!member) {
+                throw std::invalid_argument(
+                    "KV compact rebuild selected a page outside this address");
+            }
+        }
+        const std::uint32_t tail_columns = visible_tokens - (count - 1U) * page_size;
+        if (pages_->committed_columns(selected.back()) < tail_columns) {
+            throw std::invalid_argument(
+                "KV compact rebuild frontier exceeds the selected tail page");
+        }
+        const auto is_selected = [&](LogicalKVPageHandle page) {
+            return std::find(selected.begin(), selected.end(), page) != selected.end();
+        };
+        // Release every old membership first. A selected page keeps its descriptor alive
+        // through the reference retained in the next loop; only unselected pages whose
+        // LAST owner is this address are dematerialized.
+        for (std::uint32_t slot = 0; slot < address.page_count; ++slot) {
+            const LogicalKVPageHandle old = membership(address, slot);
+            membership(address, slot) = {};
+            if (!pages_->valid(old)) { continue; }
+            const bool keep = is_selected(old);
+            pages_->release_active_reference(old);
+            if (!keep && pages_->active_address_references(old) == 0 &&
+                pages_->can_dematerialize(old)) {
+                pages_->dematerialize(old, address.reservation);
+            }
+        }
+        for (const LogicalKVPageHandle page : selected) {
+            pages_->retain_active_reference(page);
+        }
+        for (std::uint32_t slot = 0; slot < count; ++slot) {
+            membership(address, slot) = selected[slot];
+        }
+        address.page_count          = count;
+        address.committed_frontier  = visible_tokens;
+        address.checkpoint_frontier = 0;
+        publish_membership(address, stream);
+        rebuild_checkpoint_protection();
+    }
+
+    // Publish the ATTENTION view only: compact slot i names the Device page of
+    // logical_pages[i], while the address keeps its full logical membership, frontier
+    // and checkpoint protection. This is the upstream ExecutionView contract
+    // (`visible_tokens` + dense compact_start) without upstream's destructive
+    // truncate/archive: our logical history stays mapped so checkpoints and prefix
+    // reuse keep their pages, and the ring's existing demotion/restore still owns
+    // residency. The caller must give logical pages in ascending order; every page
+    // must be Device-resident. Reads are bounded by `visible_tokens`, so table
+    // entries past the compact prefix may stay stale and are never dereferenced.
+    //
+    // This is the adaptation used by the single-lane compaction prototype: the mask
+    // is replaced by a dense row, but the address bookkeeping is untouched.
+    //
+    // `pending_tokens` is the part of `visible_tokens` the caller is about to write
+    // in this round. Pending columns form a CONTIGUOUS LOGICAL suffix, possibly
+    // crossing pages; a former partial tail in that suffix must not be dropped.
+    // Every visible column before that suffix must already be committed.
+    void publish_compact_view(KVAddressSpaceHandle handle,
+                              std::span<const std::uint32_t> logical_pages,
+                              std::uint32_t visible_tokens, RankStreams stream = {},
+                              std::uint32_t pending_tokens = 0) {
+        Address& address = require_active(handle);
+        constexpr std::uint32_t page_size =
+            static_cast<std::uint32_t>(kPagedKVPageSize);
+        const auto count = static_cast<std::uint32_t>(logical_pages.size());
+        if (logical_pages.empty() || visible_tokens == 0 ||
+            pending_tokens > visible_tokens ||
+            static_cast<std::uint64_t>(visible_tokens) >
+                static_cast<std::uint64_t>(count) * page_size ||
+            visible_tokens <= (count - 1U) * page_size) {
+            throw std::invalid_argument("KV compact view geometry is invalid");
+        }
+        const std::uint32_t tail_columns = visible_tokens - (count - 1U) * page_size;
+        const std::uint64_t logical_end =
+            static_cast<std::uint64_t>(logical_pages.back()) * page_size + tail_columns;
+        if (pending_tokens > logical_end) {
+            throw std::invalid_argument("KV compact pending suffix underflows logical history");
+        }
+        const std::uint64_t pending_begin = logical_end - pending_tokens;
+        if (pending_tokens != 0) {
+            const auto first = static_cast<std::uint32_t>(pending_begin / page_size);
+            const auto begin = std::lower_bound(logical_pages.begin(), logical_pages.end(), first);
+            if (begin == logical_pages.end() || *begin != first ||
+                static_cast<std::uint64_t>(logical_pages.end() - begin) !=
+                    static_cast<std::uint64_t>(logical_pages.back()) - first + 1U) {
+                throw std::invalid_argument("KV compact view omits a pending write page");
+            }
+        }
+        publish_scratch_.clear();
+        for (std::uint32_t slot = 0; slot < count; ++slot) {
+            const std::uint32_t page = logical_pages[slot];
+            if (page >= address.page_count ||
+                (slot != 0 && logical_pages[slot - 1] >= page)) {
+                throw std::invalid_argument(
+                    "KV compact view pages must be ascending members of the address");
+            }
+            const LogicalKVPageHandle logical = membership(address, page);
+            if (!pages_->valid(logical) || !pages_->device_resident(logical)) {
+                throw std::invalid_argument(
+                    "KV compact view requires a Device-resident selected page");
+            }
+            const std::uint32_t columns = slot + 1U == count ? tail_columns : page_size;
+            const std::uint64_t page_begin = static_cast<std::uint64_t>(page) * page_size;
+            const auto required_committed = static_cast<std::uint32_t>(
+                pending_begin > page_begin
+                    ? std::min<std::uint64_t>(columns, pending_begin - page_begin)
+                    : 0U);
+            if (pages_->committed_columns(logical) < required_committed) {
+                throw std::invalid_argument(
+                    "KV compact view exposes uncommitted columns outside its pending suffix");
+            }
+            publish_scratch_.push_back(pages_->physical(logical));
+        }
+        tables_->publish(address.row->handle(), 0, publish_scratch_, stream);
+    }
+
+    // Restore the logical execution row after a compact publication (a prefill,
+    // checkpoint restore or mode switch that addresses KV in original coordinates).
+    // Only Device-resident runs are written: a Host-demoted page has no physical page
+    // to name, and the resident mask hides its slot until it is restored. Writing the
+    // full membership would throw on exactly those pages.
+    void publish_logical_view(KVAddressSpaceHandle handle, RankStreams stream = {}) {
+        Address& address = require_active(handle);
+        publish_membership_resident_runs(address, stream);
+    }
+
     [[nodiscard]] bool can_destructive_truncate_inactive(
         KVAddressSpaceHandle handle, std::uint32_t frontier,
         bool tail_host_replica_will_be_released = false) const noexcept {

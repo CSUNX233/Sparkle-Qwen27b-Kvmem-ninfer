@@ -687,7 +687,7 @@ void ProgramImpl::start_sequence(std::uint32_t lane, SequenceState& sequence,
             throw std::logic_error("request plan has an invalid prefix reuse path");
         }
 
-        restore_retrieval(retrieval);
+        restore_retrieval(sequence.lane, retrieval);
         // Admission established exact token-prefix identity, including this user question.
         // Refresh before the first suffix chunk maps historical pages.
         (void)ops::detail::kvmem_rescore_cached_query(staged.prompt.query_span_begin,
@@ -898,10 +898,11 @@ runtime::ExecutionTiming ProgramImpl::resolve_pending_raw(
     try {
         timing.resume_submit();
         const std::span<const ops::GdnReplayFoldRow> fold_span(fold_rows.data(), lanes.size());
+        auto& retrieval = retrieval_workspace_for_lane(lanes.front());
         if (speculative_backend == SpeculativeBackend::Mtp && lanes.size() == 1 &&
             !cancelled.front() && ops::detail::kvmem_decode_index_enabled() &&
-            retrieval_index && retrieval_harvest) {
-            retrieval_index->append_committed(*retrieval_harvest,
+            retrieval.index && retrieval_harvest_staging) {
+            retrieval.index->append_committed(*retrieval_harvest_staging,
                 requests[lanes.front()].pending.base_E, record_width,
                 accepted_tokens.front(), device.stream);
         }

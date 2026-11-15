@@ -9,7 +9,8 @@ namespace ninfer::ops {
 
 __global__ void mtp_prepare_next_round_kernel(
     const std::int32_t* verify_ids, const std::int32_t* next_anchors, const std::int32_t* accepted,
-    const std::int32_t* updated_frontiers, const std::int32_t* remaining_budgets,
+    const std::int32_t* updated_frontiers, const std::int32_t* logical_frontiers,
+    const std::int32_t* remaining_budgets,
     const std::int32_t* licensed_counts, const std::int32_t* rope_deltas,
     std::int32_t* alignment_ids, std::int32_t* next_extents, std::int32_t* ar_positions,
     std::int32_t* ar_rope_positions, std::int32_t* ar_valid_columns, std::int32_t k,
@@ -24,18 +25,22 @@ __global__ void mtp_prepare_next_round_kernel(
     }
     if (blockIdx.x == 0 && threadIdx.x == 0) {
         const int licensed       = licensed_counts[row];
+        // Acceptance advanced the logical frontier used by sampling. The cache
+        // ingress is still the round's base; advance that independently.
+        const int logical_after  = logical_frontiers[row];
+        const int cache_after    = updated_frontiers[row] + licensed;
         const int remaining      = remaining_budgets[row] - licensed;
         const int budget_extent  = remaining > 1 ? remaining - 1 : 0;
-        const int context_extent = max_context - updated_frontiers[row] - 1;
+        const int context_extent = max_context - logical_after - 1;
         int next                 = budget_extent < context_extent ? budget_extent : context_extent;
         next                     = next < 0 ? 0 : (next > proposal_k ? proposal_k : next);
         next_extents[row]        = next;
         const int steps          = proposal_k > 1 ? proposal_k - 1 : 1;
         for (int s = 0; s < steps; ++s) {
             const int offset          = s * ar_step_stride + row;
-            const int position        = updated_frontiers[row] + s;
+            const int position        = cache_after + s;
             ar_positions[offset]      = position;
-            ar_rope_positions[offset] = position + rope_deltas[row];
+            ar_rope_positions[offset] = logical_after + s + rope_deltas[row];
             ar_valid_columns[offset]  = s + 1 < next ? 1 : 0;
         }
     }

@@ -66,6 +66,10 @@ ninfer_add_test(ninfer_qwen3_5_context_store_test
   SOURCES "${CMAKE_CURRENT_LIST_DIR}/test_context_store.cpp"
   LIBRARIES ninfer_engine ninfer_core)
 
+ninfer_add_test(ninfer_qwen3_5_kvmem_compact_view_test
+  SOURCES "${CMAKE_CURRENT_LIST_DIR}/test_kvmem_compact_view.cpp"
+  LIBRARIES ninfer_engine ninfer_core)
+
 ninfer_add_test(ninfer_qwen3_5_ring_host_pressure_test
   SOURCES "${CMAKE_CURRENT_LIST_DIR}/test_ring_host_pressure.cpp"
   LIBRARIES ninfer_engine ninfer_core)
@@ -207,6 +211,9 @@ ninfer_add_test(ninfer_qwen3_5_mlp_a8_decode_test
 ninfer_add_test(ninfer_qwen3_5_lookup_draft_test
   SOURCES "${CMAKE_CURRENT_LIST_DIR}/test_lookup_draft.cpp"
   LIBRARIES ninfer_core)
+
+ninfer_add_test(ninfer_qwen3_5_kvmem_compact_selection_test
+  SOURCES "${CMAKE_CURRENT_LIST_DIR}/test_kvmem_compact_selection.cpp")
 
 ninfer_add_test(ninfer_qwen3_5_mtp_adaptive_test
   SOURCES "${CMAKE_CURRENT_LIST_DIR}/test_mtp_adaptive.cpp"

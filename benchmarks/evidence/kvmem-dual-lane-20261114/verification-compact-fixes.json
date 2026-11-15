@@ -1,0 +1,356 @@
+{
+  "date": "2026-11-15",
+  "branch": "codex/kvmem-dual-lane",
+  "source_base": "9480a0b66ed72c7a953a59dd5e770a0559a335d5",
+  "working_tree_committed": false,
+  "candidate_engine_sha256": "14e97b700b25957d3caf636bc48a43f7b399fce8f9cec1f4550ecd4a1adc8ce9",
+  "hardware_measured": "RTX 5070 Ti Laptop, 12227 MiB; not the target 16GB GPU",
+  "build": {
+    "host_units_rebuilt": 72,
+    "cuda_mtp_launcher_rebuilt": true,
+    "clean_full_build": false
+  },
+  "fixes": [
+    "complete pending suffix and per-page committed coverage",
+    "text/backend logical execution table restoration",
+    "independent sink/recent/retrieval plus retained resident visibility",
+    "per-lane physical quota, preferred/shared-page protection and Host duplicate retry",
+    "logical acceptance RNG positions, independently advanced cache/RoPE frontiers"
+  ],
+  "units": [
+    {
+      "test": "test_kvmem_compact_selection",
+      "exit_code": 0,
+      "test_sha256": "4146e8bc5e50f92f6945450cfe376e37593fe25216d7c2d2b9a4281dc8e5b8f2"
+    },
+    {
+      "test": "test_kvmem_compact_view",
+      "exit_code": 0,
+      "test_sha256": "b13bfcd4798475db480168764a8e809add1722175dcd02c25a2356168a660571"
+    },
+    {
+      "test": "test_ring_demote",
+      "exit_code": 0,
+      "test_sha256": "f7d7b0b9401d665d26c6b11e9f3927a9ad860d7d60c9b48de664337b64842093"
+    },
+    {
+      "test": "test_ring_host_pressure",
+      "exit_code": 0,
+      "test_sha256": "bd88cfb3509a731d3b2ae736b6eb6fcc10a231c65c576b28b787b7072602a4d0"
+    }
+  ],
+  "mtp_oracle": {
+    "passed": true,
+    "test_source_sha256": "243e6876dedf3f80b8dbfe6398b5cffa35f5d456d5303cbf461b2d33f45ec084",
+    "scope": "full existing width/acceptance matrix plus six cache/logical split cases"
+  },
+  "mask110_control": {
+    "engine_sha256": "328a42c778dd2f4be67ec1fa6c78b5160b6253b83d09ccd7b82254758f588876",
+    "passed": true,
+    "strict_lines": true,
+    "usage": {
+      "completion_tokens": 733,
+      "completion_tokens_details": {
+        "reasoning_tokens": 619
+      },
+      "prompt_tokens": 110171,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      },
+      "total_tokens": 110904
+    }
+  },
+  "final_long_quality": {
+    "temperature": 0,
+    "seed": 42,
+    "reasoning_effort": "xhigh",
+    "max_output_caps": [
+      4096,
+      4096
+    ],
+    "items": [
+      {
+        "case": "long110k",
+        "input_sha256": "f2f0aa7fa4dbfb100f57eccadb99e2e8a4e208be1e00f865ac64e52d3c996842",
+        "passed": true,
+        "finish": "stop",
+        "seconds": 269.61,
+        "strict_lines": true,
+        "correct_unique": 12,
+        "n": 12,
+        "usage": {
+          "completion_tokens": 763,
+          "completion_tokens_details": {
+            "reasoning_tokens": 649
+          },
+          "prompt_tokens": 110171,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 110934
+        }
+      },
+      {
+        "case": "long218k",
+        "input_sha256": "a19bdaa81fc569e307f73f2f0bc993819131194552eb09430781a56aacfa57e3",
+        "passed": true,
+        "finish": "stop",
+        "seconds": 487.375,
+        "score": {
+          "json_ok": true,
+          "items": [
+            {
+              "id": "q1",
+              "expected": "ERR-4471",
+              "got": "ERR-4471",
+              "ok": true
+            },
+            {
+              "id": "q2",
+              "expected": "5417",
+              "got": "5417",
+              "ok": true
+            },
+            {
+              "id": "q3",
+              "expected": "ingest-v3-eu-west",
+              "got": "ingest-v3-eu-west",
+              "ok": true
+            },
+            {
+              "id": "q4",
+              "expected": "FEATURE_SHARD_REBALANCE_V2",
+              "got": "FEATURE_SHARD_REBALANCE_V2",
+              "ok": true
+            },
+            {
+              "id": "q5",
+              "expected": "sk_live_9f42c",
+              "got": "sk_live_9f42c",
+              "ok": true
+            },
+            {
+              "id": "q6",
+              "expected": "ledger_events_v9",
+              "got": "ledger_events_v9",
+              "ok": true
+            },
+            {
+              "id": "q7",
+              "expected": "*/7 * * * *",
+              "got": "*/7 * * * *",
+              "ok": true
+            },
+            {
+              "id": "q8",
+              "expected": "acme-prod-archive",
+              "got": "acme-prod-archive",
+              "ok": true
+            },
+            {
+              "id": "q9",
+              "expected": "rank-v4",
+              "got": "rank-v4",
+              "ok": true
+            },
+            {
+              "id": "q10",
+              "expected": "LeaseCoordinator",
+              "got": "LeaseCoordinatorService",
+              "ok": true
+            },
+            {
+              "id": "q11",
+              "expected": "shard.rebalance.v2",
+              "got": "shard.rebalance.v2",
+              "ok": true
+            },
+            {
+              "id": "q12",
+              "expected": "expo-1.7",
+              "got": "expo-1.7",
+              "ok": true
+            },
+            {
+              "id": "q13",
+              "expected": "queue_depth_p99",
+              "got": "queue_depth_p99",
+              "ok": true
+            },
+            {
+              "id": "q14",
+              "expected": "SIGRTMIN+7",
+              "got": "SIGRTMIN+7",
+              "ok": true
+            },
+            {
+              "id": "q15",
+              "expected": "policy_engine.py",
+              "got": "policy/policy_engine.py",
+              "ok": true
+            },
+            {
+              "id": "q16",
+              "expected": "team-ingest",
+              "got": "team-ingest",
+              "ok": true
+            },
+            {
+              "id": "q17",
+              "expected": "t-9f42c",
+              "got": "t-9f42c",
+              "ok": true
+            },
+            {
+              "id": "q18",
+              "expected": "2026-11-20",
+              "got": "2026-11-20",
+              "ok": true
+            },
+            {
+              "id": "q19",
+              "expected": "Mira",
+              "got": "Mira",
+              "ok": true
+            },
+            {
+              "id": "q20",
+              "expected": "5%",
+              "got": "5%",
+              "ok": true
+            },
+            {
+              "id": "q21",
+              "expected": "eu-west-3",
+              "got": "eu-west-3",
+              "ok": true
+            },
+            {
+              "id": "q22",
+              "expected": "42k",
+              "got": "42k",
+              "ok": true
+            },
+            {
+              "id": "q23",
+              "expected": "v3.7",
+              "got": "v3.7",
+              "ok": true
+            },
+            {
+              "id": "q24",
+              "expected": "safe-mode",
+              "got": "safe-mode",
+              "ok": true
+            },
+            {
+              "id": "q25",
+              "expected": "96",
+              "got": "96",
+              "ok": true
+            },
+            {
+              "id": "q26",
+              "expected": "keep-original",
+              "got": "keep-original",
+              "ok": true
+            }
+          ],
+          "pass": 26,
+          "n": 26
+        },
+        "exact_field_matches": 24,
+        "key_set_equal": true,
+        "canonical_json_equal_historical": false,
+        "usage": {
+          "completion_tokens": 1081,
+          "completion_tokens_details": {
+            "reasoning_tokens": 836
+          },
+          "prompt_tokens": 217899,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 218980
+        }
+      }
+    ],
+    "peak_gpu_mib": 11240
+  },
+  "final_dual_long": {
+    "passed": true,
+    "rows2": true,
+    "temperature": 0.6,
+    "seed": 42,
+    "profile": "two lanes, context131072/pool32768, sink4096/recent8192/retrieve2048 per lane, MTP3 eager",
+    "lane_checks": {
+      "A": true,
+      "B": true
+    },
+    "peak_gpu_mib": 11250,
+    "usage": {
+      "A": {
+        "prompt_tokens": 40958,
+        "completion_tokens": 1610,
+        "finish": "stop"
+      },
+      "B": {
+        "prompt_tokens": 40958,
+        "completion_tokens": 1480,
+        "finish": "stop"
+      }
+    }
+  },
+  "forced_continuation": {
+    "passed": true,
+    "control_applied": true,
+    "prompt_tokens": [
+      56,
+      40982
+    ],
+    "scope": "test-only thinking cap8, forced control25, MTP+Graph"
+  },
+  "tool_continuation": {
+    "passed": true,
+    "first_tool": "read_file",
+    "second_finish": "stop"
+  },
+  "failures_retained": {
+    "required_only_110k": "failed at4096 output cap; no answer",
+    "legacy_prefill_restore_only": "same failure; not presented as the quality fix",
+    "resident_fill_v5_110k": "strict12/12, stop763; v5 218K not run; final v6 218K passed 26/26 after the RNG fix"
+  },
+  "sources_sha256": {
+    "engine/src/models/qwen3_5/program/storage/compact_selection.h": "7763f9459cedf2e6b86fee4e8b183f2da740abbf9a75cf6883b44e83a188df19",
+    "engine/src/models/qwen3_5/program/storage/context.cpp": "fdd8cdba5e4dabfe9eaa00cb9ae37476a42eedbd0ac3746c83af2f66359f3484",
+    "engine/src/models/qwen3_5/program/storage/kv_store.h": "4c04d787a930674af8a43ad6e2211a4c5a822dff2727c235114264dea776d830",
+    "engine/src/models/qwen3_5/program/storage/ring_demote.h": "de3b5e52f21b21ad6e543837bc815d3c7b314c8d770a9436261ee2b7de4d3f52",
+    "engine/src/models/qwen3_5/program/planning/startup.cpp": "f8361ca05ab0823e1f676bf9ceb64fa9e5432089aa00dfc32d4a0bc8b940854d",
+    "engine/src/models/qwen3_5/program/speculative/mtp.cpp": "3f99c1cf468d662e9f56e25ce5eb4779cc97b015843e8afe3c2e75dd598fdd09",
+    "engine/src/ops/kernel/mtp_round.cuh": "ddf164df561fb7b6494e13402db2521c80f96f0e89049101418684e21d38fe91",
+    "engine/tests/ops/test_mtp_round.cpp": "243e6876dedf3f80b8dbfe6398b5cffa35f5d456d5303cbf461b2d33f45ec084"
+  },
+  "not_proven": [
+    "16GB full-budget dual-lane peak and throughput",
+    "GPU vision under compact",
+    "dual-lane decode indexing (single-lane gate remains)",
+    "MTP/prefill cancellation or arbitrary multi-turn Agent tasks",
+    "bit-identical outputs for all batch/sampling shapes"
+  ],
+  "daily_engine_replaced": false,
+  "daily_launch_or_config_changed": false,
+  "main_pool_planning_only": {
+    "daily_sink_recent_retrieve": [
+      12288,
+      19456,
+      6144
+    ],
+    "prefill_chunk": 128,
+    "worst_pending_pages": 3,
+    "slack_pages_per_lane": 8,
+    "minimum_dual_main_pages": 1206,
+    "minimum_dual_main_tokens": 77184,
+    "suggested_research_main_tokens": 78336,
+    "target16gb_measured": false
+  }
+}

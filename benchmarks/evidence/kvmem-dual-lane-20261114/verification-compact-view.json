@@ -1,0 +1,41 @@
+{
+ "date": "2026-11-14",
+ "branch": "codex/kvmem-dual-lane",
+ "stage": "stage 3: upstream compact execution view primitives",
+ "status": "store-level primitives verified on GPU; product path still uses the mask ring",
+ "upstream_basis": {
+  "kvmem_lane_model": "P independent target contexts/lanes, each with its own KV window (docs/multi-lane-conversations.md)",
+  "ninfer_window_model": "per-sequence compact execution view: KvmemWindowState.pages + compact_position + destructive truncate/remap/commit (storage/kvmem_window.cpp)"
+ },
+ "primitives": {
+  "rebuild_compact": "ACTIVE address becomes a dense view of selected members without moving KV bytes; membership references and the execution table row change; sole-owner unselected pages are dematerialized",
+  "publish_compact_view": "adapter for this fork: republish only the execution table row; logical membership, frontier and checkpoint protection stay intact"
+ },
+ "test": {
+  "name": "ninfer_qwen3_5_kvmem_compact_view_test",
+  "source": "engine/tests/models/qwen3_5/test_kvmem_compact_view.cpp",
+  "exit_code": 0,
+  "pass_line": "PASS: compact execution view keeps selected pages in place, rewrites the table row, reclaims sole-owner pages, grows afterwards, and the non-destructive publication leaves the logical address and checkpoints intact",
+  "proves": [
+   "compact slot order maps to the selected pages",
+   "execution table row is republished to the selected physical pages",
+   "the partial tail page remains last and its committed columns bound visible_tokens",
+   "unselected sole-owner pages release descriptors and Device replicas",
+   "a compact address grows afterwards at the next compact slot",
+   "publish_compact_view leaves the logical address, members and replicas intact",
+   "duplicate pages, zero-token tails, over-wide frontiers and foreign pages are rejected"
+  ],
+  "does_not_prove": [
+   "model attention runs from the compact view",
+   "prefill/decode cache positions are compact while RoPE positions stay logical",
+   "cross-lane page reclamation, batch decode or real dual requests"
+  ]
+ },
+ "source_sha256": {
+  "engine/src/models/qwen3_5/program/storage/kv_store.h": "1e2cd4c22511d79297075ca5c7958e1182e81a688133e2ad95a02477a6ef558a",
+  "engine/tests/models/qwen3_5/test_kvmem_compact_view.cpp": "47c4be4ef1765a370ca8353e4c351e17862bf01326ca6e2e4ae819757ecf0133",
+  "engine/tests/models/qwen3_5/tests.cmake": "5b260abecebec15c164376bd4589e042796001f363f78e05c65b98ec9ccc599c"
+ },
+ "daily_engine_unchanged": true,
+ "next": "wire NINFER_KV_COMPACT=1 into ensure_sequence_kv_mapped for a single ordinary lane; cache positions compact, RoPE logical; graphs disabled for the first cut"
+}

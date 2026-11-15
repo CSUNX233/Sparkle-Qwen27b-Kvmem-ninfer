@@ -1,0 +1,870 @@
+{
+  "date": "2026-11-14",
+  "branch": "codex/kvmem-dual-lane",
+  "base_commit": "2d86b7a0e18f96f3f7b4a191f74797f04fc503eb",
+  "status": "first-stage retrieval workspace refactor; real dual-request inference NOT enabled",
+  "upstreams": {
+    "kvmem": "0d7b4688f1e08b0334b67c2baf31a9160ed1ac98",
+    "ninfer_base": "6cc1f9fa438b7094685ae417dfa40e1ca324e617",
+    "ninfer_head_observed_only": "40d913db2e87e2211fce4089c0c7920480a5e7a0",
+    "patch_sha256": "1a7037cd3131cb28c12ceb598fb540b79482a97f7135e7ef721480d3f7bbc954"
+  },
+  "candidate_engine_sha256": "930e2d2639b99934976824fcf27744030af04615d3dc323a15dccb36239bc5cb",
+  "rebuilt_host_units": 71,
+  "rebuilt_cuda_units": 11,
+  "clean_full_build": false,
+  "toolchain": "CUDA 13.0.48; MSVC 14.44.35207; sm120a; retained hash-checked static dependencies",
+  "workspace_tests": {
+    "cases": [
+      {
+        "test": "test_kvmem_score_schedule",
+        "host": "0",
+        "prefetch": "0",
+        "exit_code": 0
+      },
+      {
+        "test": "test_kvmem_score_schedule",
+        "host": "1",
+        "prefetch": "0",
+        "exit_code": 0
+      },
+      {
+        "test": "test_kvmem_score_schedule",
+        "host": "1",
+        "prefetch": "1",
+        "exit_code": 0
+      },
+      {
+        "test": "test_kvmem_workspace",
+        "host": "0",
+        "prefetch": "0",
+        "exit_code": 0
+      },
+      {
+        "test": "test_kvmem_workspace",
+        "host": "1",
+        "prefetch": "0",
+        "exit_code": 0
+      },
+      {
+        "test": "test_kvmem_workspace",
+        "host": "1",
+        "prefetch": "1",
+        "exit_code": 0
+      }
+    ],
+    "all_passed": true,
+    "oracle": "62 interleaved appends over two CUDA streams; exact constant-BF16 input F32 sums/counts; query/generation/kept isolation and inactive-owner release",
+    "does_not_prove": "two simultaneous full-model requests, two actual overlapping CUDA kernels, or full lane cancellation"
+  },
+  "short_smoke": {
+    "passed": true,
+    "daily_files_unchanged": true,
+    "scope": "single-lane CPU-vision profile, short greedy outputs only; no parallel Agent or long-context claim",
+    "baseline": {
+      "sha256": "f9a6b29cb7755b18ae02dcc130c17b5e28b2c97530c647db9936680bd5c2ad46",
+      "prompt_tokens": [
+        16,
+        37,
+        185
+      ],
+      "peak_gpu_mib": 11447
+    },
+    "candidate": {
+      "sha256": "930e2d2639b99934976824fcf27744030af04615d3dc323a15dccb36239bc5cb",
+      "prompt_tokens": [
+        16,
+        37,
+        185
+      ],
+      "peak_gpu_mib": 11721
+    },
+    "message_equality": {
+      "short": true,
+      "cached_followup": true,
+      "visual_boundary_first16_tokens": true
+    }
+  },
+  "historical_quality_replay": {
+    "scope": "single-lane historical synthetic quality replay; not dual-request inference",
+    "historical_fixture_hashes_match": true,
+    "fixture_contract": "same prompts, xhigh, original output caps, seed42 and original scorer",
+    "completed": true,
+    "no_observed_quality_regression": true,
+    "comparisons": [
+      {
+        "case": "arithmetic",
+        "same_input": true,
+        "baseline_passed": true,
+        "candidate_passed": true,
+        "output_equal": true,
+        "same_prompt_tokens": true
+      },
+      {
+        "case": "json_schema",
+        "same_input": true,
+        "baseline_passed": true,
+        "candidate_passed": true,
+        "output_equal": true,
+        "same_prompt_tokens": true
+      },
+      {
+        "case": "zh_constraints",
+        "same_input": true,
+        "baseline_passed": true,
+        "candidate_passed": true,
+        "output_equal": true,
+        "same_prompt_tokens": true
+      },
+      {
+        "case": "code_boundary",
+        "same_input": true,
+        "baseline_passed": true,
+        "candidate_passed": true,
+        "output_equal": true,
+        "same_prompt_tokens": true
+      },
+      {
+        "case": "updated_memory",
+        "same_input": true,
+        "baseline_passed": true,
+        "candidate_passed": true,
+        "output_equal": true,
+        "same_prompt_tokens": true
+      },
+      {
+        "case": "untrusted_log",
+        "same_input": true,
+        "baseline_passed": true,
+        "candidate_passed": true,
+        "output_equal": true,
+        "same_prompt_tokens": true
+      },
+      {
+        "case": "tool_read",
+        "same_input": true,
+        "baseline_passed": true,
+        "candidate_passed": true,
+        "output_equal": true,
+        "same_prompt_tokens": true
+      },
+      {
+        "case": "tool_edit",
+        "same_input": true,
+        "baseline_passed": false,
+        "candidate_passed": false,
+        "output_equal": true,
+        "same_prompt_tokens": true
+      },
+      {
+        "case": "mixed_evidence",
+        "same_input": true,
+        "baseline_passed": true,
+        "candidate_passed": true,
+        "output_equal": true,
+        "same_prompt_tokens": true
+      },
+      {
+        "case": "long110k",
+        "same_input": true,
+        "baseline_passed": true,
+        "candidate_passed": true,
+        "output_equal": true,
+        "same_prompt_tokens": true
+      },
+      {
+        "case": "long218k",
+        "same_input": true,
+        "baseline_passed": true,
+        "candidate_passed": true,
+        "output_equal": true,
+        "same_prompt_tokens": true
+      }
+    ],
+    "arms": [
+      {
+        "label": "baseline",
+        "sha256": "f9a6b29cb7755b18ae02dcc130c17b5e28b2c97530c647db9936680bd5c2ad46",
+        "peak_gpu_mib": 11351,
+        "items": [
+          {
+            "case": "arithmetic",
+            "input_sha256": "ac9f84c7db859866ee84ab3eead71d108a0973ad06275bbad3a5492a8ebc85f4",
+            "passed": true,
+            "finish": "stop",
+            "seconds": 1.141,
+            "output_sha256": "b6cef496a25e654bb703253d545c8dc3ac3e76ba7cf744cdb2d045f578415285",
+            "usage": {
+              "completion_tokens": 59,
+              "completion_tokens_details": {
+                "reasoning_tokens": 55
+              },
+              "prompt_tokens": 69,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 128
+            }
+          },
+          {
+            "case": "json_schema",
+            "input_sha256": "da9dd616711b9ec308774be2b83ac03f510bb0bd4aad8e34fa02f58eab5fd457",
+            "passed": true,
+            "finish": "stop",
+            "seconds": 0.734,
+            "output_sha256": "95ee48fa02e89a446343c2bd98d7b5c91fbc2d96a25dc2b6535060664d4a5711",
+            "usage": {
+              "completion_tokens": 45,
+              "completion_tokens_details": {
+                "reasoning_tokens": 35
+              },
+              "prompt_tokens": 69,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 114
+            }
+          },
+          {
+            "case": "zh_constraints",
+            "input_sha256": "21529820df68608e141e5218f00cf44d967ec789f90c2d6435171b06b901627b",
+            "passed": true,
+            "finish": "stop",
+            "seconds": 1.891,
+            "output_sha256": "ded24e2a91f2237cd98377bef1f6a898973718c62f773c654396d06816ca6467",
+            "usage": {
+              "completion_tokens": 119,
+              "completion_tokens_details": {
+                "reasoning_tokens": 112
+              },
+              "prompt_tokens": 100,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 219
+            }
+          },
+          {
+            "case": "code_boundary",
+            "input_sha256": "c475b5b921aec061059e7d5bca855e0ad2bdf8884aaaa55c784f86dd9750a90f",
+            "passed": true,
+            "finish": "stop",
+            "seconds": 3.766,
+            "output_sha256": "5d851269ae73b3ac8dfdf064953907acc215e240a67698fb921bebd6ea306ee6",
+            "usage": {
+              "completion_tokens": 311,
+              "completion_tokens_details": {
+                "reasoning_tokens": 267
+              },
+              "prompt_tokens": 126,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 437
+            }
+          },
+          {
+            "case": "updated_memory",
+            "input_sha256": "6b5be9a4d28d7fc69b41032d39e117baffe91eabc0067d578965a8752d3eae5d",
+            "passed": true,
+            "finish": "stop",
+            "seconds": 2.343,
+            "output_sha256": "b06473ce59c14fbb8c7abb1629b3a627c9faa00992147d14f143aee45f13ec61",
+            "usage": {
+              "completion_tokens": 145,
+              "completion_tokens_details": {
+                "reasoning_tokens": 125
+              },
+              "prompt_tokens": 119,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 264
+            }
+          },
+          {
+            "case": "untrusted_log",
+            "input_sha256": "553a029e4530d5ff4cd798166a42c68f683f6ecb46148ae2b12dc3d2e1d02ee4",
+            "passed": true,
+            "finish": "stop",
+            "seconds": 1.297,
+            "output_sha256": "9858006900a9dbfebc84ec6476f3ef7e79188ea14932c7fcd7ad549063a5588d",
+            "usage": {
+              "completion_tokens": 102,
+              "completion_tokens_details": {
+                "reasoning_tokens": 96
+              },
+              "prompt_tokens": 104,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 206
+            }
+          },
+          {
+            "case": "tool_read",
+            "input_sha256": "81c0258e8d242d45c4b185a25cf5cd0ac01e8485d13435f3e33e70b8021663ce",
+            "passed": true,
+            "finish": "tool_calls",
+            "seconds": 1.485,
+            "output_sha256": "f895807a004d898660ea295e4ebe3b7f69545b668cb0d8671992cc5fdd15ae7a",
+            "usage": {
+              "completion_tokens": 48,
+              "completion_tokens_details": {
+                "reasoning_tokens": 21
+              },
+              "prompt_tokens": 799,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 847
+            }
+          },
+          {
+            "case": "tool_edit",
+            "input_sha256": "8085494d4da080410be78ce1a83b666167c055eacc3f4f083a4e9ae7f7563db8",
+            "passed": false,
+            "finish": "tool_calls",
+            "seconds": 1.875,
+            "output_sha256": "5c1eab9e46d5e176390f1cf69a2a0e74dfe4d632e8448c64ef0b380898111193",
+            "usage": {
+              "completion_tokens": 92,
+              "completion_tokens_details": {
+                "reasoning_tokens": 32
+              },
+              "prompt_tokens": 802,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 894
+            }
+          },
+          {
+            "case": "mixed_evidence",
+            "input_sha256": "db3df43830f65cfb205cce977c3e769f995e2dea41cc163cea7e0dd426b73939",
+            "passed": true,
+            "finish": "stop",
+            "seconds": 127.156,
+            "output_sha256": "73b8a43af5b8d76e1cc94d323c7f4b2bb28adf18697d27c82689c6140f8fd5f0",
+            "usage": {
+              "completion_tokens": 246,
+              "completion_tokens_details": {
+                "reasoning_tokens": 206
+              },
+              "prompt_tokens": 86191,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 86437
+            }
+          },
+          {
+            "case": "long110k",
+            "input_sha256": "f2f0aa7fa4dbfb100f57eccadb99e2e8a4e208be1e00f865ac64e52d3c996842",
+            "passed": true,
+            "finish": "stop",
+            "seconds": 329.562,
+            "output_sha256": "b119a35be1eb3b32c77a9846799c326b59b46197029eb8c7611137832d3c5e4a",
+            "correct_unique": 12,
+            "n": 12,
+            "strict_lines": true,
+            "usage": {
+              "completion_tokens": 763,
+              "completion_tokens_details": {
+                "reasoning_tokens": 649
+              },
+              "prompt_tokens": 110171,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 110934
+            }
+          },
+          {
+            "case": "long218k",
+            "input_sha256": "a19bdaa81fc569e307f73f2f0bc993819131194552eb09430781a56aacfa57e3",
+            "passed": true,
+            "finish": "stop",
+            "seconds": 500.266,
+            "output_sha256": "a374197cf8553ec661d9ad531046f6700939be8adc55b07c695cb59e662a7d61",
+            "score": {
+              "json_ok": true,
+              "pass": 26,
+              "n": 26,
+              "items": [
+                {
+                  "id": "q1",
+                  "ok": true
+                },
+                {
+                  "id": "q2",
+                  "ok": true
+                },
+                {
+                  "id": "q3",
+                  "ok": true
+                },
+                {
+                  "id": "q4",
+                  "ok": true
+                },
+                {
+                  "id": "q5",
+                  "ok": true
+                },
+                {
+                  "id": "q6",
+                  "ok": true
+                },
+                {
+                  "id": "q7",
+                  "ok": true
+                },
+                {
+                  "id": "q8",
+                  "ok": true
+                },
+                {
+                  "id": "q9",
+                  "ok": true
+                },
+                {
+                  "id": "q10",
+                  "ok": true
+                },
+                {
+                  "id": "q11",
+                  "ok": true
+                },
+                {
+                  "id": "q12",
+                  "ok": true
+                },
+                {
+                  "id": "q13",
+                  "ok": true
+                },
+                {
+                  "id": "q14",
+                  "ok": true
+                },
+                {
+                  "id": "q15",
+                  "ok": true
+                },
+                {
+                  "id": "q16",
+                  "ok": true
+                },
+                {
+                  "id": "q17",
+                  "ok": true
+                },
+                {
+                  "id": "q18",
+                  "ok": true
+                },
+                {
+                  "id": "q19",
+                  "ok": true
+                },
+                {
+                  "id": "q20",
+                  "ok": true
+                },
+                {
+                  "id": "q21",
+                  "ok": true
+                },
+                {
+                  "id": "q22",
+                  "ok": true
+                },
+                {
+                  "id": "q23",
+                  "ok": true
+                },
+                {
+                  "id": "q24",
+                  "ok": true
+                },
+                {
+                  "id": "q25",
+                  "ok": true
+                },
+                {
+                  "id": "q26",
+                  "ok": true
+                }
+              ]
+            },
+            "canonical_json_equal_historical": true,
+            "exact_field_matches": 25,
+            "key_set_equal": true,
+            "usage": {
+              "completion_tokens": 1311,
+              "completion_tokens_details": {
+                "reasoning_tokens": 963
+              },
+              "prompt_tokens": 217899,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 219210
+            }
+          }
+        ]
+      },
+      {
+        "label": "candidate",
+        "sha256": "930e2d2639b99934976824fcf27744030af04615d3dc323a15dccb36239bc5cb",
+        "peak_gpu_mib": 11346,
+        "items": [
+          {
+            "case": "arithmetic",
+            "input_sha256": "ac9f84c7db859866ee84ab3eead71d108a0973ad06275bbad3a5492a8ebc85f4",
+            "passed": true,
+            "finish": "stop",
+            "seconds": 1.156,
+            "output_sha256": "b6cef496a25e654bb703253d545c8dc3ac3e76ba7cf744cdb2d045f578415285",
+            "usage": {
+              "completion_tokens": 59,
+              "completion_tokens_details": {
+                "reasoning_tokens": 55
+              },
+              "prompt_tokens": 69,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 128
+            }
+          },
+          {
+            "case": "json_schema",
+            "input_sha256": "da9dd616711b9ec308774be2b83ac03f510bb0bd4aad8e34fa02f58eab5fd457",
+            "passed": true,
+            "finish": "stop",
+            "seconds": 0.734,
+            "output_sha256": "95ee48fa02e89a446343c2bd98d7b5c91fbc2d96a25dc2b6535060664d4a5711",
+            "usage": {
+              "completion_tokens": 45,
+              "completion_tokens_details": {
+                "reasoning_tokens": 35
+              },
+              "prompt_tokens": 69,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 114
+            }
+          },
+          {
+            "case": "zh_constraints",
+            "input_sha256": "21529820df68608e141e5218f00cf44d967ec789f90c2d6435171b06b901627b",
+            "passed": true,
+            "finish": "stop",
+            "seconds": 3.735,
+            "output_sha256": "ded24e2a91f2237cd98377bef1f6a898973718c62f773c654396d06816ca6467",
+            "usage": {
+              "completion_tokens": 119,
+              "completion_tokens_details": {
+                "reasoning_tokens": 112
+              },
+              "prompt_tokens": 100,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 219
+            }
+          },
+          {
+            "case": "code_boundary",
+            "input_sha256": "c475b5b921aec061059e7d5bca855e0ad2bdf8884aaaa55c784f86dd9750a90f",
+            "passed": true,
+            "finish": "stop",
+            "seconds": 3.734,
+            "output_sha256": "5d851269ae73b3ac8dfdf064953907acc215e240a67698fb921bebd6ea306ee6",
+            "usage": {
+              "completion_tokens": 311,
+              "completion_tokens_details": {
+                "reasoning_tokens": 267
+              },
+              "prompt_tokens": 126,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 437
+            }
+          },
+          {
+            "case": "updated_memory",
+            "input_sha256": "6b5be9a4d28d7fc69b41032d39e117baffe91eabc0067d578965a8752d3eae5d",
+            "passed": true,
+            "finish": "stop",
+            "seconds": 2.218,
+            "output_sha256": "b06473ce59c14fbb8c7abb1629b3a627c9faa00992147d14f143aee45f13ec61",
+            "usage": {
+              "completion_tokens": 145,
+              "completion_tokens_details": {
+                "reasoning_tokens": 125
+              },
+              "prompt_tokens": 119,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 264
+            }
+          },
+          {
+            "case": "untrusted_log",
+            "input_sha256": "553a029e4530d5ff4cd798166a42c68f683f6ecb46148ae2b12dc3d2e1d02ee4",
+            "passed": true,
+            "finish": "stop",
+            "seconds": 1.328,
+            "output_sha256": "9858006900a9dbfebc84ec6476f3ef7e79188ea14932c7fcd7ad549063a5588d",
+            "usage": {
+              "completion_tokens": 102,
+              "completion_tokens_details": {
+                "reasoning_tokens": 96
+              },
+              "prompt_tokens": 104,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 206
+            }
+          },
+          {
+            "case": "tool_read",
+            "input_sha256": "81c0258e8d242d45c4b185a25cf5cd0ac01e8485d13435f3e33e70b8021663ce",
+            "passed": true,
+            "finish": "tool_calls",
+            "seconds": 1.469,
+            "output_sha256": "f895807a004d898660ea295e4ebe3b7f69545b668cb0d8671992cc5fdd15ae7a",
+            "usage": {
+              "completion_tokens": 48,
+              "completion_tokens_details": {
+                "reasoning_tokens": 21
+              },
+              "prompt_tokens": 799,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 847
+            }
+          },
+          {
+            "case": "tool_edit",
+            "input_sha256": "8085494d4da080410be78ce1a83b666167c055eacc3f4f083a4e9ae7f7563db8",
+            "passed": false,
+            "finish": "tool_calls",
+            "seconds": 1.844,
+            "output_sha256": "5c1eab9e46d5e176390f1cf69a2a0e74dfe4d632e8448c64ef0b380898111193",
+            "usage": {
+              "completion_tokens": 92,
+              "completion_tokens_details": {
+                "reasoning_tokens": 32
+              },
+              "prompt_tokens": 802,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 894
+            }
+          },
+          {
+            "case": "mixed_evidence",
+            "input_sha256": "db3df43830f65cfb205cce977c3e769f995e2dea41cc163cea7e0dd426b73939",
+            "passed": true,
+            "finish": "stop",
+            "seconds": 125.656,
+            "output_sha256": "73b8a43af5b8d76e1cc94d323c7f4b2bb28adf18697d27c82689c6140f8fd5f0",
+            "usage": {
+              "completion_tokens": 246,
+              "completion_tokens_details": {
+                "reasoning_tokens": 206
+              },
+              "prompt_tokens": 86191,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 86437
+            }
+          },
+          {
+            "case": "long110k",
+            "input_sha256": "f2f0aa7fa4dbfb100f57eccadb99e2e8a4e208be1e00f865ac64e52d3c996842",
+            "passed": true,
+            "finish": "stop",
+            "seconds": 272.047,
+            "output_sha256": "b119a35be1eb3b32c77a9846799c326b59b46197029eb8c7611137832d3c5e4a",
+            "correct_unique": 12,
+            "n": 12,
+            "strict_lines": true,
+            "usage": {
+              "completion_tokens": 763,
+              "completion_tokens_details": {
+                "reasoning_tokens": 649
+              },
+              "prompt_tokens": 110171,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 110934
+            }
+          },
+          {
+            "case": "long218k",
+            "input_sha256": "a19bdaa81fc569e307f73f2f0bc993819131194552eb09430781a56aacfa57e3",
+            "passed": true,
+            "finish": "stop",
+            "seconds": 497.156,
+            "output_sha256": "a374197cf8553ec661d9ad531046f6700939be8adc55b07c695cb59e662a7d61",
+            "score": {
+              "json_ok": true,
+              "pass": 26,
+              "n": 26,
+              "items": [
+                {
+                  "id": "q1",
+                  "ok": true
+                },
+                {
+                  "id": "q2",
+                  "ok": true
+                },
+                {
+                  "id": "q3",
+                  "ok": true
+                },
+                {
+                  "id": "q4",
+                  "ok": true
+                },
+                {
+                  "id": "q5",
+                  "ok": true
+                },
+                {
+                  "id": "q6",
+                  "ok": true
+                },
+                {
+                  "id": "q7",
+                  "ok": true
+                },
+                {
+                  "id": "q8",
+                  "ok": true
+                },
+                {
+                  "id": "q9",
+                  "ok": true
+                },
+                {
+                  "id": "q10",
+                  "ok": true
+                },
+                {
+                  "id": "q11",
+                  "ok": true
+                },
+                {
+                  "id": "q12",
+                  "ok": true
+                },
+                {
+                  "id": "q13",
+                  "ok": true
+                },
+                {
+                  "id": "q14",
+                  "ok": true
+                },
+                {
+                  "id": "q15",
+                  "ok": true
+                },
+                {
+                  "id": "q16",
+                  "ok": true
+                },
+                {
+                  "id": "q17",
+                  "ok": true
+                },
+                {
+                  "id": "q18",
+                  "ok": true
+                },
+                {
+                  "id": "q19",
+                  "ok": true
+                },
+                {
+                  "id": "q20",
+                  "ok": true
+                },
+                {
+                  "id": "q21",
+                  "ok": true
+                },
+                {
+                  "id": "q22",
+                  "ok": true
+                },
+                {
+                  "id": "q23",
+                  "ok": true
+                },
+                {
+                  "id": "q24",
+                  "ok": true
+                },
+                {
+                  "id": "q25",
+                  "ok": true
+                },
+                {
+                  "id": "q26",
+                  "ok": true
+                }
+              ]
+            },
+            "canonical_json_equal_historical": true,
+            "exact_field_matches": 25,
+            "key_set_equal": true,
+            "usage": {
+              "completion_tokens": 1311,
+              "completion_tokens_details": {
+                "reasoning_tokens": 963
+              },
+              "prompt_tokens": 217899,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 219210
+            }
+          }
+        ]
+      }
+    ],
+    "meets_historical_long_targets": true,
+    "all_normalized_outputs_equal": true
+  },
+  "limits": [
+    "No daily engine/config replacement; no concurrent-model inference gate removed.",
+    "Original synthetic 110K/218K inputs and scoring reused, in the same case order for both current arms; not each in its own cold process.",
+    "Single seed only; no general accuracy or speed guarantee.",
+    "Whole-GPU sampled memory peaks include background and load-time effects. Short smoke peak differs; no zero-VRAM-increase claim.",
+    "First visual-smoke attempt had conflicting enable_thinking and reasoning_effort options, returned HTTP400 on baseline; fixture corrected and both arms rerun.",
+    "Original incremental CUDA objects had been cleaned; all 11 required CUDA units were rebuilt instead of substituting unverified files.",
+    "Bindings remain same-executor-thread operations; no automatic cross-thread cleanup or mixed manual-binding support."
+  ],
+  "source_sha256": {
+    "engine/src/ops/kvmem/retrieval_workspace.h": "c8d7d3923bc27c0c83d110195397c2240ec39c79b304ea81fa7a0f0b5187194f",
+    "engine/tests/ops/test_kvmem_workspace.cpp": "b2c3f9dedb7b66b5fbedc1b097c37f1b365f7a9c7ab2988190c41dd1b9f5ba88",
+    "engine/src/models/qwen3_5/program/program_impl.h": "a5467f48ee5956a88f72b2cfb327c5509c1411165de1525366150fed83bb3f49",
+    "engine/src/models/qwen3_5/program/storage/context.cpp": "ad3d00e63ebfe9b9c45aff879b51729e7e0403df7e9ec068f7c57de7690059ff"
+  }
+}

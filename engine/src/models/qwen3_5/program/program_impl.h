@@ -4,6 +4,7 @@
 #include "models/qwen3_5/program/internal.h"
 
 #include "ops/kvmem/kvmem_score.h"
+#include "ops/kvmem/retrieval_workspace.h"
 #include "core/arena.h"
 #include "core/disk_kv_bridge.h"
 #include "core/gdn_replay_records.h"
@@ -468,6 +469,16 @@ struct SequenceState {
     // Mapped text pages at the last rescore; rescoring only happens when this changes.
     std::uint32_t ring_scored_mapped      = 0;
     std::uint64_t ring_score_generation = 0;
+    // NINFER_KV_COMPACT: the DECODE attention view. The address itself stays logical
+    // (`text_kv_valid`/`execution_frontier` and checkpoints are untouched); this only
+    // describes the dense execution-table row published for decode. `compact_pages`
+    // lists the logical pages in compact-slot order; `compact_removed_tokens` is
+    // logical frontier - compact visible tokens. Cleared/invalidated by any mapping
+    // that addresses KV in logical coordinates (prefill, restore, trim).
+    std::vector<std::uint32_t> compact_pages;
+    std::uint32_t compact_visible_tokens = 0;
+    std::uint32_t compact_removed_tokens = 0;
+    bool compact_view_valid              = false;
     std::uint32_t dflash_context_frontier = 0;
     std::array<TokenId, qwen3_5::kMtpDecodeMaximumDrafts> mtp_drafts{};
     std::uint32_t mtp_draft_count = 0;
@@ -822,12 +833,19 @@ public:
     // loop walks stages, so every existing workspace call site keeps using one arena object.
     std::vector<DeviceArena> workspace_storage_by_rank;
     WorkspaceArena work;
-    std::unique_ptr<ops::RawKShadowHarvest> retrieval_harvest;
-    std::unique_ptr<ops::MeanKIndex> retrieval_index;
-    ops::detail::KvMemScoreProbe retrieval_probe;
-    void bind_retrieval_workspace() noexcept;
-    [[nodiscard]] RetrievalCheckpoint capture_retrieval();
-    void restore_retrieval(const RetrievalCheckpoint& checkpoint);
+    // One retrieval context per lane: the mean-K index, published query/ranking
+    // and score readback are per sequence. The raw-K staging buffer is SHARED
+    // (retrieval_harvest_staging) because a captured decode graph bakes the
+    // staging address and one graph serves every lane; each lane's index takes
+    // its own row slice out of that buffer (MeanKIndex::append_committed_slice).
+    // All workspaces are created empty in the constructor; their index allocates
+    // lazily on the lane's first use, preserving the single-lane allocation shape.
+    std::vector<std::unique_ptr<ops::RetrievalWorkspace>> retrieval_workspaces;
+    std::unique_ptr<ops::RawKShadowHarvest> retrieval_harvest_staging;
+    void bind_retrieval_workspace(std::uint32_t lane);
+    [[nodiscard]] ops::RetrievalWorkspace& retrieval_workspace_for_lane(std::uint32_t lane);
+    [[nodiscard]] RetrievalCheckpoint capture_retrieval(std::uint32_t lane);
+    void restore_retrieval(std::uint32_t lane, const RetrievalCheckpoint& checkpoint);
     [[nodiscard]] RetrievalCheckpoint selected_retrieval(const SequenceState& sequence,
         ReusePath reuse, std::optional<runtime::CheckpointRef> checkpoint) const;
     std::unique_ptr<qwen3_5::DecoderState> decoder;
@@ -1620,8 +1638,15 @@ private:
                                         std::uint32_t backend_pages);
     void bind_sequence_kv(SequenceState& sequence);
     void unbind_sequence_kv(SequenceState& sequence) noexcept;
+    // `decode_round` selects the compact DECODE attention view when NINFER_KV_COMPACT is
+    // on; every other caller addresses KV in logical coordinates (prefill/restore).
     void ensure_sequence_kv_mapped(SequenceState& sequence, std::uint32_t main_tokens,
-                                   std::uint32_t backend_tokens = 0);
+                                   std::uint32_t backend_tokens = 0,
+                                   bool decode_round = false);
+    // Logical position -> compact position under the current decode view. Returns the
+    // logical value when no compact view is active.
+    [[nodiscard]] std::uint32_t compact_position(const SequenceState& sequence,
+                                                 std::uint32_t logical) const;
 
     // LOCAL PROTOTYPE (KVMem-style ring): demote the oldest Device-resident pages (skipping the
     // attention sink and, on the first pass, `preferred`) until at least `target_free` Device pages
@@ -1630,7 +1655,8 @@ private:
     std::uint32_t demote_kv_pages_to_host(KVAddressSpaceStore& addresses, LogicalKVPageStore& pages,
                                           const KVAddressSpaceHandle& address,
                                           std::uint32_t sink_pages, std::uint32_t target_free,
-                                          std::span<const std::uint32_t> preferred);
+                                          std::span<const std::uint32_t> preferred,
+                                          bool preserve_selected = false);
     // LOCAL PROTOTYPE (KVMem-style ring): release Device pages held by OTHER (inactive) addresses
     // until `target_free` more Device pages are free. Inactive addresses are pure cache in ring mode
     // (reuse of a host-demoted source is declined), so their Device replicas can go without affecting

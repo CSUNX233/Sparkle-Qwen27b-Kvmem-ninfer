@@ -275,6 +275,8 @@ void ProgramImpl::prepare_graphs() {
                 mtp_host_ingress->anchors[row] = 0;
                 mtp_host_ingress->base_frontiers[row] =
                     checked_i32(frontier, "graph representative MTP frontier");
+                mtp_host_ingress->base_rope_frontiers[row] =
+                    checked_i32(frontier, "graph representative MTP RoPE frontier");
                 mtp_host_ingress->remaining_budgets[row] =
                     checked_i32(capacity, "graph representative MTP budget");
                 mtp_host_ingress->current_extents[row] = static_cast<std::int32_t>(extent);

@@ -1,4 +1,7 @@
 set(ninfer_op_tests
+  kvmem_workspace
+  kvmem_lane_workspace
+  kvmem_batch_commit
   kvmem_query_chunks
   kvmem_decode_query
   kvmem_score_schedule

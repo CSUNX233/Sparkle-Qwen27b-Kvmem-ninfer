@@ -102,6 +102,19 @@ inline bool kvmem_cached_query_enabled() noexcept {
     return enabled;
 }
 
+// Dense compact execution view for DECODE (the upstream KVMem/NInfer model).
+// Default off: the shipped ring keeps the logical address and the resident mask.
+// When on, a decode round publishes a dense execution-table row over the selected
+// pages and maps cache positions compactly; RoPE positions and the logical
+// address/frontier stay unchanged. Prefill keeps the logical row + mask.
+inline bool kvmem_compact_enabled() noexcept {
+    static const bool enabled = [] {
+        const char* value = std::getenv("NINFER_KV_COMPACT");
+        return value != nullptr && value[0] == '1' && value[1] == '\0';
+    }();
+    return enabled;
+}
+
 // Experimental, bounded complete-span capture. Default off preserves the qualified policy.
 inline bool kvmem_query_assemble_enabled() noexcept {
     static const bool enabled = [] {

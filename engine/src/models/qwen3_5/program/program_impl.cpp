@@ -552,8 +552,17 @@ ProgramImpl::ProgramImpl(const execution::Parameters& parameters_in, const Seque
         mtp_controller.emplace();
         mtp_controller->reset(draft_window);
     }
+    // One empty retrieval context per lane. Creating them here (not lazily in a
+    // noexcept bind) keeps the bind path allocation-free; the CUDA/pinned Host
+    // allocations inside index/harvest stay lazy, so a single-lane Program keeps
+    // exactly the allocation shape it had before.
+    retrieval_workspaces.clear();
+    retrieval_workspaces.reserve(max_concurrency);
+    for (std::uint32_t lane = 0; lane < max_concurrency; ++lane) {
+        retrieval_workspaces.push_back(std::make_unique<ops::RetrievalWorkspace>());
+    }
     // Allocate before capture; later graph bodies only borrow these stable addresses.
-    bind_retrieval_workspace();
+    bind_retrieval_workspace(0);
     if (ops::detail::kvmem_score_enabled() && ops::detail::kvmem_decode_index_enabled()) {
         if (max_concurrency != 1 || is_masked_draft_backend(speculative_backend)) {
             throw std::invalid_argument("decode indexing currently requires one lane and ordinary/MTP decode");
@@ -561,6 +570,10 @@ ProgramImpl::ProgramImpl(const execution::Parameters& parameters_in, const Seque
         if (prefill_chunk < widest_verify_window() + 1U) {
             throw std::invalid_argument("decode indexing staging is narrower than target verification");
         }
+        // The gate above keeps this to one lane. Once batch decoding harvests
+        // rows, the shared staging must hold max_concurrency * (verify + 1)
+        // tokens; the per-lane indexes would then consume append_committed_slice
+        // with row_offset = row * (verify + 1).
         const auto& cfg = parameters.model.config().text;
         (void)ops::raw_k_shadow_harvest_for(prefill_chunk,
             dimension(cfg.attention->head_dim) * dimension(cfg.attention->num_key_value_heads),
@@ -578,14 +591,46 @@ ProgramImpl::ProgramImpl(const execution::Parameters& parameters_in, const Seque
     work.reset();
     work.reset_peak();
     workspace_logical_peak_bytes = 0;
-    if (ops::detail::kvmem_score_enabled() && max_concurrency != 1) {
-        throw std::invalid_argument("KVMem content retrieval currently requires max-concurrency=1");
+    if (ops::detail::kvmem_score_enabled() && max_concurrency != 1 &&
+        !(ops::detail::kvmem_compact_enabled() && max_concurrency == 2)) {
+        throw std::invalid_argument("KVMem content retrieval currently requires max-concurrency=1 "
+                                    "(compact decode: 1 or 2)");
     }
     if (ops::detail::kvmem_score_enabled() && context_cache.enabled &&
         context_cache.mode == ContextCacheMode::Hybrid) {
         throw std::invalid_argument("KVMem retrieval checkpoints require the legacy context cache");
     }
-    bind_retrieval_workspace();
+    if (ops::detail::kvmem_compact_enabled()) {
+        // Prototype scope: one or two ordinary lanes, eager decode. The compact row
+        // replaces the mask only for decode; prefill and MTP keep the logical row.
+        // Refuse rather than silently running the mask path.
+        const bool cpu_vision_ok =
+            !vision_enabled || parameters.model.options().cpu_vision();
+        if (!ops::detail::kvmem_score_enabled() ||
+            (max_concurrency != 1 && max_concurrency != 2) ||
+            (speculative_backend != SpeculativeBackend::None &&
+             speculative_backend != SpeculativeBackend::Mtp) ||
+            !cpu_vision_ok || causal_scoring) {
+            throw std::invalid_argument(
+                "NINFER_KV_COMPACT requires KVMem retrieval, --max-concurrency 1 or 2, ordinary "
+                "or MTP decode (no DFlash), no vision except --vision-cpu, and a generation "
+                "Program");
+        }
+        const auto& attention = parameters.model.config().text.attention;
+        const std::int32_t index_blocks = static_cast<std::int32_t>(
+            capacity / static_cast<std::uint32_t>(kPagedKVPageSize));
+        const std::size_t index_per_lane = ops::mean_k_index_bytes(
+            static_cast<std::int32_t>(decoder->text_kv.layers()), index_blocks,
+            dimension(attention->num_key_value_heads), dimension(attention->head_dim));
+        std::fprintf(stderr,
+                     "[kvmem] compact decode view ON: lanes=%u, decode publishes a dense execution "
+                     "row per lane; prefill keeps the logical row + mask. Host index budget: "
+                     "%.1f MiB/lane x %u = %.1f MiB (lazy).\n",
+                     max_concurrency,
+                     static_cast<double>(index_per_lane) / (1024.0 * 1024.0), max_concurrency,
+                     static_cast<double>(index_per_lane * max_concurrency) / (1024.0 * 1024.0));
+    }
+    bind_retrieval_workspace(0);
     create_hybrid_prefix_cache(startup_observer);
 }
 
@@ -596,10 +641,8 @@ void ProgramImpl::synchronize_transfer_streams() const {
 }
 
 ProgramImpl::~ProgramImpl() noexcept {
-    if (ops::detail::bound_score_probe == &retrieval_probe) {
-        ops::detail::kvmem_score_bind(nullptr);
-        ops::mean_k_index_bind(nullptr);
-        ops::raw_k_shadow_harvest_bind(nullptr);
+    for (const auto& workspace : retrieval_workspaces) {
+        if (workspace) { workspace->unbind_if_current(); }
     }
     flush_disk_tier();
     for (std::size_t rank = 0; rank < transfer_streams.size(); ++rank) {
@@ -618,7 +661,9 @@ std::vector<float> ProgramImpl::causal_score(PreparedPromptData&& prompt,
         context_cache.enabled) {
         throw std::logic_error("causal scoring Program has generation-only startup features");
     }
-    restore_retrieval({});
+    // Causal scoring has generation-only startup features disabled and is a
+    // single-sequence Program; lane 0 is the only lane it ever uses.
+    restore_retrieval(0, {});
     const std::size_t token_count_size = prompt.token_ids.size();
     if (token_count_size < 2 || token_count_size > capacity) {
         throw std::invalid_argument("causal score token count must be in [2,capacity]");

@@ -1,0 +1,68 @@
+{
+ "date": "2026-11-15",
+ "branch": "codex/kvmem-dual-lane",
+ "stage": "stage 7: tight-pool two-lane compact decode",
+ "status": "two 10,108-token lanes fit a 16,384-token pool (256 pages) with per-lane static windows; own-lane demotion sufficed",
+ "candidate_engine_sha256": "d2fd1e611b6173c0e8f4695e211ffd3128d02bf7620f40d79aba35f3feb0c7e0",
+ "config": {
+  "max_concurrency": 2,
+  "kv_capacity_tokens": 16384,
+  "kv_capacity_pages": 256,
+  "window_tokens": 8192,
+  "sink_tokens": 4096,
+  "retrieve_tokens": 2048,
+  "per_lane_cap": "pool/max_concurrency = 128 pages; selection = 120 pages per lane",
+  "prompt_tokens": 10108,
+  "graphs": true,
+  "concurrent_prefill": true,
+  "decode_index": "off"
+ },
+ "result": {
+  "batch_decode_rows2_logged": true,
+  "code_found": {
+   "A": true,
+   "B": true
+  },
+  "serial_equals_concurrent": {
+   "A": false,
+   "B": false
+  },
+  "common_prefix_chars": {
+   "A": 868,
+   "B": 39
+  },
+  "completion_tokens": {
+   "A": {
+    "serial": 1226,
+    "concurrent": 1060
+   },
+   "B": {
+    "serial": 1071,
+    "concurrent": 1193
+   }
+  },
+  "tail_error": false,
+  "peak_gpu_mib": {
+   "serial": 10534,
+   "concurrent": 10566
+  },
+  "demote_other_short_lines": 79,
+  "demote_other_short_slots_zero": 79
+ },
+ "conclusion": [
+  "two lanes selected 120 pages each out of a 256-page pool and still completed; the ring freed pages from the calling lane only",
+  "every demote-other short line reports slots=0, i.e. the other ACTIVE lane was skipped by design and the calling lane still found its own pages",
+  "cross-lane reclamation of another active lane was not needed for this shape and remains unimplemented; a pathological case where one lane must take another active lane pages is still unverified"
+ ],
+ "daily_engine_unchanged": {
+  "sha256": "f9a6b29cb7755b18ae02dcc130c17b5e28b2c97530c647db9936680bd5c2ad46",
+  "installed_engine_replaced": false,
+  "launch_or_config_changed": false
+ },
+ "does_not_prove": [
+  "MTP/DFlash or vision under compact",
+  "a pool where one active lane must reclaim another active lane pages",
+  "cancellation of one lane, tool continuation, Host admission",
+  "bit-identical batch vs single-lane outputs"
+ ]
+}

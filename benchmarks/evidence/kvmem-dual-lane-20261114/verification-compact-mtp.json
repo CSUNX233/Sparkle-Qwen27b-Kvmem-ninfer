@@ -1,0 +1,124 @@
+{
+ "date": "2026-11-15",
+ "branch": "codex/kvmem-dual-lane",
+ "stage": "stage 8: MTP compact (single lane, graphs, and two-lane batch)",
+ "status": "MTP compact validated on one lane (eager and CUDA Graph) and on a two-lane eager batch; dual-lane MTP+Graph at 262K does not fit 12 GiB",
+ "candidate_engine_sha256": "11130258ce0ca9dd5544cb3fea6f5ad16c0e8d2ac26139b4fa58fc515f388369",
+ "implementation": [
+  "MtpDecodeIngress gained base_rope_frontiers: base_frontiers are compact cache positions, the new array keeps the original logical frontier for AR RoPE and the context ceiling",
+  "mtp_prepare_next_round gained logical_frontiers: ar_positions stay compact, ar_rope_positions stay logical",
+  "the compact selection reserves slots for the contiguous MTP pages after the text tail; text and MTP execution rows are published as one aligned prefix",
+  "the text compact view accepts the round pending (extent + 1), not just one decode token"
+ ],
+ "single_lane_no_pressure_mtp": {
+  "window_tokens": 32768,
+  "prompt_tokens": 20242,
+  "short_arms_equal": true,
+  "long_outputs_equal": true,
+  "long_needle_found": {
+   "mask": true,
+   "compact": true
+  },
+  "peak_gpu_mib": {
+   "mask": 11182,
+   "compact": 11182
+  }
+ },
+ "single_lane_pressure_mtp": {
+  "window_tokens": 19456,
+  "prompt_tokens": 40942,
+  "short_arms_equal": true,
+  "long_outputs_equal": true,
+  "long_needle_found": {
+   "mask": true,
+   "compact": true
+  },
+  "compact_tail_error": false,
+  "peak_gpu_mib": {
+   "mask": 11180,
+   "compact": 11182
+  }
+ },
+ "single_lane_pressure_mtp_graph": {
+  "window_tokens": 19456,
+  "prompt_tokens": 40942,
+  "long_outputs_equal": true,
+  "long_needle_found": {
+   "mask": true,
+   "compact": true
+  },
+  "compact_tail_error": false,
+  "decode_tok_s_compact": 106.3,
+  "graph_allowance_mib": 64,
+  "note": "without --cuda-graph-allowance-mib 64 the MTP graph startup asks for 1.86 GB of runtime and fails on this 12 GiB card; the daily profile already passes it"
+ },
+ "two_lane_mtp_batch_eager": {
+  "max_concurrency": 2,
+  "max_context": 131072,
+  "kv_capacity_tokens": 32768,
+  "window_tokens": 8192,
+  "prompt_tokens": 10108,
+  "batch_decode_rows2_logged": true,
+  "code_found": {
+   "A": true,
+   "B": true
+  },
+  "serial_equals_concurrent": {
+   "A": false,
+   "B": false
+  },
+  "common_prefix_chars": {
+   "A": 1515,
+   "B": 398
+  },
+  "completion_tokens": {
+   "A": {
+    "serial": 1114,
+    "concurrent": 1158
+   },
+   "B": {
+    "serial": 1140,
+    "concurrent": 1264
+   }
+  },
+  "tail_error": false,
+  "peak_gpu_mib": {
+   "serial": 11232,
+   "concurrent": 11252
+  }
+ },
+ "dual_lane_mtp_graph_memory_limits": {
+  "max_context_262144_eager": "runtime reservation 1,298,848,000 B vs 1,151,336,448 B available",
+  "max_context_262144_graph": "runtime reservation 1,365,956,864 B vs 1,151,336,448 B available",
+  "note": "dual-lane MTP needs a smaller context/pool or a larger GPU; the 131,072/32,768 eager configuration fits"
+ },
+ "daily_engine_unchanged": {
+  "sha256": "f9a6b29cb7755b18ae02dcc130c17b5e28b2c97530c647db9936680bd5c2ad46",
+  "installed_engine_replaced": false,
+  "launch_or_config_changed": false
+ },
+ "does_not_prove": [
+  "dual-lane MTP with CUDA Graphs on this 12 GiB card",
+  "vision under compact",
+  "cancellation of one lane, tool continuation, Host admission",
+  "bit-identical batch vs single-lane outputs"
+ ],
+ "daily_config_compact_off": {
+  "passed": true,
+  "candidate_sha256_in_that_run": "11130258ce0ca9dd5544cb3fea6f5ad16c0e8d2ac26139b4fa58fc515f388369",
+  "daily_files_unchanged": true,
+  "message_equality": {
+   "short": true,
+   "follow": true,
+   "visual_boundary": true,
+   "prompt_tokens": true
+  },
+  "peak_gpu_mib": {
+   "baseline": 11238,
+   "candidate": 11238
+  },
+  "profile": "daily p0_rk4v4_daily with MTP3, CPU vision and CUDA Graphs; compact unset",
+  "note": "the MTP op/ingress change keeps the non-compact path bit-identical on this smoke"
+ },
+ "build_scope": "71 Host units + MTP wrapper recompiled; 11 CUDA objects reused and the MTP launcher rebuilt; the new MTP wrapper/launcher objects override the stale ones in the retained static libraries; not a clean full build"
+}

@@ -1,5 +1,9 @@
 # 本发行版的修改范围
 
+2026-11-15 双路研究增加 [compact 正确性与质量预算修复](KVMEM_DUAL_LANE_FIXES.md)：保留 MTP 跨页 pending、非 decode 同步恢复 text/backend 逻辑表，分开 sink/recent/retrieval 并落实每路物理配额；不足时明确拒绝，不静默缩减质量预算。仍为隔离候选，未替换日常；最终测试和未完成项见专项说明。
+
+实验分支 `codex/kvmem-dual-lane` 目前完成九个研究阶段：检索工作区封装、每 lane 的 index/probe、compact execution view 原语、单路/双路 decode 接线、batch、CUDA Graph、紧池、MTP compact，以及 CPU 视觉/取消/工具续接/Host 准入（`NINFER_KV_COMPACT=1`，默认关闭，要求 1–2 路/CPU 视觉；MTP、CUDA Graph、取消一路与工具续接已验证）；双并发门禁仍保留，不是新的双并发发行版，未安装日常。上游固定版本、适配边界、质量回归与未完成项见 [双路研究记录](KVMEM_DUAL_LANE_RESEARCH.md)。
+
 v1.1.0（2026-11-11）在 v1.0.0 发布源码上增加两项底层引擎修复：[完整查询评分后补齐前邻页](DEFERRED_NEIGHBOR_FIX.md)（每次最多 8 页、不增加检索总页数、默认关闭的 `NINFER_KVMEM_RANK_AUDIT_DIR` 审计）和[畸形工具外壳最小修复](TOOL_ENVELOPE_FIX.md)（只报 `malformed_tool_call`，不执行原参数）。验证引擎 SHA-256 `8b2c195e32e3b58a3584b284679c990a07986691967f1b939b0fe31351559012`。部署默认改为 RK4V4 + GDN FP32，并接入 dsh 状态卡 v0.1.2；pruner 阈值放宽与 pruner-bridge 未并入。源码补丁为 `benchmarks/qualification/deferred-neighbor-c287b7d.patch` 与 `tool-envelope-c287b7d.patch`，数据见 [v1.1.0 质量保真记录](QUALITY_FIDELITY_V1.1.0.md) 和 `benchmarks/evidence/v1.1.0/`。以下 v1.0.0 段落保留历史记录。
 
 v1.0.0（2026-10-27）在 v0.1.5 基线上发布查询层与 agent 执行层升级：[路径查询实验](PATH_QUERY_EXPERIMENT.md)的 `related-tool-head`、`suffix refresh=tail`、`QUERY_ASSEMBLE=1`，以及 [执行前校验/多动作账本](../integrations/README.md)。真实 116,907-token 故障历史完整路径 1/4→4/4、留出 4/8→8/8；因果 8/8、短续接 10/12 路径保持；旧延迟压力首轮仍 2/4。H7 等权双查询、H8 固定事务页、H11 工具头扩展拒绝并归档，不默认启用。引擎源码仍保留 legacy 默认，发布启动器显式设置三个开关；验证引擎 SHA-256 `71259a21f7b525ca7477193a292e4d3623cc58b9efd785005ee934cc29673507`，原 v0.1.5 引擎 `38bc4d8c6be07afd6c74b902cc33403bf2ee139a2c50129d363d68d74a7609d6` 作为回退。以下 H7/H8 段落是 v1.0.0 之前的实验历史。

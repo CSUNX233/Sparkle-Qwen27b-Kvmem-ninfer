@@ -1,0 +1,74 @@
+{
+ "date": "2026-11-15",
+ "branch": "codex/kvmem-dual-lane",
+ "stage": "stage 6: compact with CUDA Graphs (single lane and two-lane batch)",
+ "status": "compact decode now works with graphs; MTP/DFlash and vision remain gated off",
+ "candidate_engine_sha256": "d2fd1e611b6173c0e8f4695e211ffd3128d02bf7620f40d79aba35f3feb0c7e0",
+ "gate_change": "use_cuda_graph removed from the NINFER_KV_COMPACT rejection; graphs are captured once at startup and replayed with compact cache positions and compact table rows",
+ "single_lane_pressure_with_graphs": {
+  "window_tokens": 19456,
+  "prompt_tokens": 40942,
+  "short_arms_equal": true,
+  "long_needle_found": {
+   "mask": true,
+   "compact": true
+  },
+  "long_outputs_equal": true,
+  "compact_switch_logged": true,
+  "compact_tail_error": false,
+  "peak_gpu_mib": {
+   "mask": 10772,
+   "compact": 10774
+  },
+  "decode_tok_s": "47.8 (compact arm) vs 41-42 eager in the earlier run"
+ },
+ "two_lane_batch_with_graphs": {
+  "window_tokens": 8192,
+  "prompt_tokens": 10108,
+  "batch_decode_rows2_logged": true,
+  "code_found": {
+   "A": true,
+   "B": true
+  },
+  "serial_equals_concurrent": {
+   "A": false,
+   "B": false
+  },
+  "common_prefix_chars": {
+   "A": 868,
+   "B": 48
+  },
+  "completion_tokens": {
+   "A": {
+    "serial": 1226,
+    "concurrent": 1060
+   },
+   "B": {
+    "serial": 1071,
+    "concurrent": 1139
+   }
+  },
+  "tail_error": false,
+  "peak_gpu_mib": {
+   "serial": 10956,
+   "concurrent": 10986
+  },
+  "note": "compact batch rows=2 under graph replay; both answers coherent and contain their own code; batch-vs-serial divergence matches the dense control"
+ },
+ "daily_config_compact_off": {
+  "candidate_sha256_in_that_run": "0d34353f0938a4a0f6ce3fbf711bbbbefe7489a6953344a14a3f15efc5300750",
+  "passed": true,
+  "note": "daily p0_rk4v4_daily with MTP3 and CPU vision, compact off; the later graph-gate change is compact-only"
+ },
+ "daily_engine_unchanged": {
+  "sha256": "f9a6b29cb7755b18ae02dcc130c17b5e28b2c97530c647db9936680bd5c2ad46",
+  "installed_engine_replaced": false,
+  "launch_or_config_changed": false
+ },
+ "does_not_prove": [
+  "compact with MTP/DFlash or vision",
+  "a tight pool where one lane reclaims another active lane pages",
+  "cancellation of one lane or tool continuation under two lanes",
+  "bit-identical outputs between batch and single-lane decoding"
+ ]
+}

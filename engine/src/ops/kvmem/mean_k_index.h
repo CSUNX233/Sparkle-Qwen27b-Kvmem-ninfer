@@ -174,6 +174,12 @@ public:
                           std::int32_t verified_width, std::int32_t committed,
                           cudaStream_t stream);
 
+    // A flattened decode batch stores each row in [row_offset, row_offset +
+    // verified_width). Only that row's accepted prefix belongs to this index.
+    void append_committed_slice(const RawKShadowHarvest& store, std::int32_t row_offset,
+                                std::int32_t token_base, std::int32_t verified_width,
+                                std::int32_t committed, cudaStream_t stream);
+
     // Same, for a caller that has one layer's staging in hand (the unit-test path, and the shape a
     // future per-layer consumer wants). `layer_index` is the FULL-ATTENTION index (0..layers-1),
     // never the global layer number (text_context.h:341-342).

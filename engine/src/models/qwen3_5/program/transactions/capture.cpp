@@ -659,7 +659,7 @@ ProgramImpl::install_private_capture(SequenceState& sequence, const CaptureGroup
                                      StateImageHandle checkpoint,
                                      std::optional<runtime::CheckpointRef> replacement) {
     detail::PhysicalResources removed;
-    const auto retrieval = capture_retrieval();
+    const auto retrieval = capture_retrieval(sequence.lane);
     if (group.rewrite) {
         if (sequence.rewrite_state && *sequence.rewrite_state != checkpoint) {
             removed = checked_resource_sum(removed,
@@ -1134,7 +1134,7 @@ ActiveCaptureResult ProgramImpl::publish_active_capture(ActiveCaptureTransaction
         shared.state    = transaction.source_state;
         shared.identity = transaction.group.identity;
         shared.frontier = transaction.group.frontier;
-        shared.retrieval = capture_retrieval();
+        shared.retrieval = capture_retrieval(sequence.lane);
         shared.backend_frontier =
             speculative_backend == SpeculativeBackend::Mtp      ? transaction.group.frontier - 1U
             : speculative_backend == SpeculativeBackend::DFlash ? transaction.group.frontier

@@ -6,6 +6,7 @@
 #include "models/qwen3_5/program/planning/graph_profiles.h"
 #include "models/qwen3_5/program/internal.h"
 #include "models/qwen3_5/program/planning/startup.h"
+#include "models/qwen3_5/program/storage/compact_selection.h"
 #include "models/qwen3_5/program/prefix/hybrid_host_layout.h"
 #include "models/qwen3_5/execution/vision.h"
 #include "models/qwen3_5/execution/workspace.h"
@@ -98,6 +99,13 @@ std::uint32_t page_count(std::uint32_t capacity) {
     return 1U + (capacity - 1U) / static_cast<std::uint32_t>(kPagedKVPageSize);
 }
 
+std::uint32_t ring_env_pages(const char* name, std::uint32_t fallback = 0U) {
+    const char* value = std::getenv(name);
+    if (!value) { return fallback; }
+    const long tokens = std::strtol(value, nullptr, 10);
+    return tokens > 0 ? static_cast<std::uint32_t>(tokens / kPagedKVPageSize) : 0U;
+}
+
 // The Main KV pages a plan may hold. The Legacy cache retains context in continuations whose pages
 // fit the C active lanes' windows, so C * L pages bound it. The hybrid cache keeps every Device
 // page no active lease holds as cached blocks, so only the token capacity representation (pages *
@@ -138,6 +146,14 @@ std::uint64_t ring_resident_pages(std::uint32_t capacity, std::uint32_t prefill_
                                 static_cast<std::uint32_t>(kPagedKVPageSize)
                           : logical_pages;
     const std::uint64_t lanes = concurrency == 0 ? 1U : concurrency;
+    if (ops::detail::kvmem_compact_enabled()) {
+        const auto pending = page_count(std::max(prefill_chunk, 64U) +
+            static_cast<std::uint32_t>(kPagedKVPageSize) - 1U);
+        const auto per_lane = compact_lane_pages(static_cast<std::uint32_t>(logical_pages),
+            ring_env_pages("NINFER_KV_SINK", 4), ring_env_pages("NINFER_KV_WINDOW"),
+            ring_env_pages("NINFER_KV_RETRIEVE"), pending);
+        return std::min<std::uint64_t>(per_lane * lanes, logical_pages * lanes);
+    }
     const std::uint64_t per_lane =
         std::min<std::uint64_t>(window_pages + page_count(prefill_chunk == 0 ? 1U : prefill_chunk),
                                 logical_pages);
@@ -1191,12 +1207,21 @@ std::unique_ptr<SequencePlanImpl> build_sequence_candidate(const SequencePlannin
                      "(that is the negative control, not a tuning knob).\n");
     }
     if (ring_requested() && inputs.max_concurrency > 1) {
+        if (!ops::detail::kvmem_compact_enabled() || inputs.max_concurrency > 2) {
+            std::fprintf(stderr,
+                         "[ring] NINFER_KV_WINDOW (KVMem ring) serves ONE active sequence: the ring cannot "
+                         "reclaim another lane's Device pages.\n"
+                         "       Run with --max-concurrency 1, or unset NINFER_KV_WINDOW.\n");
+            throw std::invalid_argument(
+                "NINFER_KV_WINDOW (KVMem ring) requires --max-concurrency 1");
+        }
+        // Compact prototype: each lane owns its window and the ring only demotes its own
+        // address. The pool must be sized for one window per lane; a lane cannot reclaim
+        // another active lane's pages.
         std::fprintf(stderr,
-                     "[ring] NINFER_KV_WINDOW (KVMem ring) serves ONE active sequence: the ring cannot "
-                     "reclaim another lane's Device pages.\n"
-                     "       Run with --max-concurrency 1, or unset NINFER_KV_WINDOW.\n");
-        throw std::invalid_argument(
-            "NINFER_KV_WINDOW (KVMem ring) requires --max-concurrency 1");
+                     "[ring] compact multi-lane prototype: lanes=%u; each lane owns its window, "
+                     "demotion stays inside the lane.\n",
+                     inputs.max_concurrency);
     }
     if (impl->context_cache.enabled && impl->context_cache.mode == ContextCacheMode::Hybrid) {
         if (ring_requested()) {
@@ -1598,26 +1623,55 @@ finalize_sequence_plan_impl(std::unique_ptr<qwen3_5::detail::SequencePlannerImpl
                       static_cast<std::uint64_t>(host_stride);
         const std::uint64_t logical_pages = page_count(plan->capacity);
         const std::uint64_t pool_pages    = plan->main_page_groups;
-        if (host_pages + pool_pages < logical_pages) {
+        if (ops::detail::kvmem_compact_enabled() && pool_pages < logical_pages) {
+            // A verification window can start in the last column of a page.
+            // Prefill also needs its entire pending chunk beside the recent history.
+            const auto pending_pages = page_count(
+                std::max(plan->prefill_chunk, widest_verify_window(*plan) + 1U) +
+                static_cast<std::uint32_t>(kPagedKVPageSize) - 1U);
+            const auto per_lane = compact_lane_pages(static_cast<std::uint32_t>(logical_pages),
+                ring_env_pages("NINFER_KV_SINK", 4), ring_env_pages("NINFER_KV_WINDOW"),
+                ring_env_pages("NINFER_KV_RETRIEVE"), pending_pages);
+            if (per_lane * plan->max_concurrency > pool_pages) {
+                throw std::invalid_argument(
+                    "compact full-quality KV budget needs " +
+                    std::to_string(per_lane * plan->max_concurrency) + " Main pages for " +
+                    std::to_string(plan->max_concurrency) + " lane(s), but the pool has " +
+                    std::to_string(pool_pages) +
+                    "; increase --kv-capacity or lower --max-concurrency; "
+                    "sink/recent/retrieval budgets were not reduced");
+            }
+        }
+        // Compact multi-lane keeps one logical history per lane. The Host tier is the
+        // shared demotion target, so host + pool must cover every lane's logical pages,
+        // not just one lane's. Without this the second lane fails mid-generation.
+        const std::uint64_t lanes =
+            (ops::detail::kvmem_compact_enabled() && plan->max_concurrency > 1)
+                ? static_cast<std::uint64_t>(plan->max_concurrency)
+                : 1U;
+        const std::uint64_t required_pages = logical_pages * lanes;
+        if (host_pages + pool_pages < required_pages) {
             std::fprintf(stderr,
                          "[ring] NINFER_KV_WINDOW (KVMem ring) cannot demote: the Legacy Host KV tier "
-                         "holds %llu page(s) and the resolved Device pool holds %llu, but the logical "
-                         "context needs %llu.\n"
+                         "holds %llu page(s) and the resolved Device pool holds %llu, but %llu lane(s) "
+                         "need %llu logical page(s).\n"
                          "       The ring's only demotion target is the Host tier, so the pool could "
-                         "never be drained and the first request would fail mid-generation.\n"
-                         "       Raise --host-kv-mib to cover at least %llu page(s) (or lower "
-                         "--max-context).\n",
+                         "never be drained and a request would fail mid-generation.\n"
+                         "       Raise --host-kv-mib to cover at least %llu page(s), lower "
+                         "--max-context, or lower --max-concurrency.\n",
                          static_cast<unsigned long long>(host_pages),
                          static_cast<unsigned long long>(pool_pages),
-                         static_cast<unsigned long long>(logical_pages),
-                         static_cast<unsigned long long>(logical_pages > pool_pages
-                                                            ? logical_pages - pool_pages
+                         static_cast<unsigned long long>(lanes),
+                         static_cast<unsigned long long>(required_pages),
+                         static_cast<unsigned long long>(required_pages > pool_pages
+                                                            ? required_pages - pool_pages
                                                             : 0U));
             throw std::invalid_argument(
                 "NINFER_KV_WINDOW (KVMem ring) needs a Host KV tier that can hold every page the "
                 "Device pool cannot: host_pages=" + std::to_string(host_pages) + " pool_pages=" +
                 std::to_string(pool_pages) + " logical_pages=" + std::to_string(logical_pages) +
-                " (raise --host-kv-mib)");
+                " lanes=" + std::to_string(lanes) +
+                " (raise --host-kv-mib or lower --max-context)");
         }
     }
     return plan;

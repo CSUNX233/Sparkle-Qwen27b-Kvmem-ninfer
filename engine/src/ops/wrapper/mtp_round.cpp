@@ -45,11 +45,12 @@ void require_row_pitched_matrix(const Tensor& t, std::int32_t rows, std::int32_t
 
 void mtp_prepare_next_round(const Tensor& verify_ids, const Tensor& next_anchors,
                             const Tensor& accepted, const Tensor& updated_frontiers,
-                            const Tensor& remaining_budgets, const Tensor& licensed_counts,
-                            const Tensor& rope_deltas, Tensor& alignment_ids, Tensor& next_extents,
-                            Tensor& ar_positions, Tensor& ar_rope_positions,
-                            Tensor& ar_valid_columns, std::int32_t proposal_drafts,
-                            std::int32_t max_context, cudaStream_t stream) {
+                            const Tensor& logical_frontiers, const Tensor& remaining_budgets,
+                            const Tensor& licensed_counts, const Tensor& rope_deltas,
+                            Tensor& alignment_ids, Tensor& next_extents, Tensor& ar_positions,
+                            Tensor& ar_rope_positions, Tensor& ar_valid_columns,
+                            std::int32_t proposal_drafts, std::int32_t max_context,
+                            cudaStream_t stream) {
     constexpr const char* op = "mtp_prepare_next_round";
     const std::int32_t T     = verify_ids.ne[0];
     const std::int32_t batch = verify_ids.ne[1];
@@ -69,6 +70,7 @@ void mtp_prepare_next_round(const Tensor& verify_ids, const Tensor& next_anchors
     require_vector(next_anchors, DType::I32, batch, op, "next_anchors");
     require_vector(accepted, DType::I32, batch, op, "accepted");
     require_vector(updated_frontiers, DType::I32, batch, op, "updated_frontiers");
+    require_vector(logical_frontiers, DType::I32, batch, op, "logical_frontiers");
     require_vector(remaining_budgets, DType::I32, batch, op, "remaining_budgets");
     require_vector(licensed_counts, DType::I32, batch, op, "licensed_counts");
     require_vector(rope_deltas, DType::I32, batch, op, "rope_deltas");
@@ -84,9 +86,9 @@ void mtp_prepare_next_round(const Tensor& verify_ids, const Tensor& next_anchors
             "mtp_prepare_next_round: AR outputs must share one step stride");
     }
     detail::mtp_prepare_next_round_launch(
-        verify_ids, next_anchors, accepted, updated_frontiers, remaining_budgets, licensed_counts,
-        rope_deltas, alignment_ids, next_extents, ar_positions, ar_rope_positions, ar_valid_columns,
-        proposal_drafts, max_context, stream);
+        verify_ids, next_anchors, accepted, updated_frontiers, logical_frontiers, remaining_budgets,
+        licensed_counts, rope_deltas, alignment_ids, next_extents, ar_positions, ar_rope_positions,
+        ar_valid_columns, proposal_drafts, max_context, stream);
 }
 
 } // namespace ninfer::ops

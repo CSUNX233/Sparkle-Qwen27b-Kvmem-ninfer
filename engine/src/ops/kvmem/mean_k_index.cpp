@@ -372,6 +372,8 @@ void MeanKIndex::append_round(const RawKShadowHarvest& store, std::int32_t token
 void MeanKIndex::append_committed(const RawKShadowHarvest& store, std::int32_t token_base,
                                  std::int32_t verified_width, std::int32_t committed,
                                  cudaStream_t stream) {
+    // Preserve the single-lane contract: graph replay does not execute the
+    // host-side round-width setter, so its last value can describe a prefill.
     if (verified_width < 1 || verified_width > store.tokens() || committed < 0 ||
         committed > verified_width || store.layers() != layers_ ||
         store.kv_size() != heads_ * head_dim_) {
@@ -380,6 +382,25 @@ void MeanKIndex::append_committed(const RawKShadowHarvest& store, std::int32_t t
     if (committed == 0 || total_bytes_ == 0) { return; }
     for (int layer = 0; layer < layers_; ++layer) {
         append_one(store.staging_for_round(layer).data, layer, committed, token_base, store.tokens(),
+                   heads_ * head_dim_ * store.tokens(), stream);
+    }
+}
+
+void MeanKIndex::append_committed_slice(const RawKShadowHarvest& store, std::int32_t row_offset,
+                                       std::int32_t token_base, std::int32_t verified_width,
+                                       std::int32_t committed, cudaStream_t stream) {
+    if (verified_width < 1 || verified_width > store.tokens() || committed < 0 ||
+        committed > verified_width || row_offset < 0 ||
+        row_offset > store.round_width() || verified_width > store.round_width() - row_offset ||
+        store.layers() != layers_ ||
+        store.kv_size() != heads_ * head_dim_) {
+        throw std::invalid_argument("mean-K committed harvest geometry is invalid");
+    }
+    if (committed == 0 || total_bytes_ == 0) { return; }
+    for (int layer = 0; layer < layers_; ++layer) {
+        const auto* source = static_cast<const unsigned short*>(store.staging_for_round(layer).data) +
+            static_cast<std::size_t>(row_offset) * heads_ * head_dim_;
+        append_one(source, layer, committed, token_base, store.tokens(),
                    heads_ * head_dim_ * store.tokens(), stream);
     }
 }

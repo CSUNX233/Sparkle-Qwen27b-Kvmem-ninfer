@@ -460,6 +460,9 @@ ProgramImpl::decode_ordinary_batch(std::span<const std::uint32_t> lanes,
                              static_cast<std::uint64_t>(lanes.size()));
         DecodeGraphExecutable* executable = nullptr;
         ops::CausalAttentionExecutionEnvelope envelope{maximum_frontier + 1, maximum_frontier + 1};
+        std::uint32_t compact_min = std::numeric_limits<std::uint32_t>::max();
+        std::uint32_t compact_max = 0;
+        bool any_compact          = false;
         if (use_cuda_graph) {
             DecodeGraphProfile& profile =
                 select_graph_profile(ordinary_graphs, static_cast<std::uint32_t>(lanes.size()),
@@ -472,9 +475,18 @@ ProgramImpl::decode_ordinary_batch(std::span<const std::uint32_t> lanes,
             SequenceState& sequence            = active_sequence(lanes[row]);
             const RequestControl& request      = requests[lanes[row]];
             const std::uint32_t frontier       = sequence.execution_frontier;
+            // Mapping may republish the decode row as a compact view; positions must be
+            // read only after it. The batch envelope spans every row's compact prefix.
+            ensure_sequence_kv_mapped(sequence, frontier + 1, 0, /*decode_round=*/true);
+            if (sequence.compact_view_valid) {
+                const std::uint32_t compact = compact_position(sequence, frontier) + 1U;
+                compact_min = std::min(compact_min, compact);
+                compact_max = std::max(compact_max, compact);
+                any_compact = true;
+            }
             ordinary_host_ingress->tokens[row] = sequence.ledger.back();
             ordinary_host_ingress->cache_positions[row] =
-                checked_i32(frontier, "ordinary batch position");
+                checked_i32(compact_position(sequence, frontier), "ordinary batch position");
             ordinary_host_ingress->sample_positions[row] =
                 checked_i32(frontier + 1U, "ordinary batch sample position");
             ordinary_host_ingress->rope_positions[row] =
@@ -488,8 +500,8 @@ ProgramImpl::decode_ordinary_batch(std::span<const std::uint32_t> lanes,
             if (request.grammar) {
                 structured_round->fill(sequence.lane, *request.grammar, {}, device.stream);
             }
-            ensure_sequence_kv_mapped(sequence, frontier + 1, 0);
         }
+        if (any_compact) { envelope = {compact_min, compact_max}; }
 
         execution::OrdinaryBatchContext schedule_state{
             {device, parameters, work, state_images->linear(0),
@@ -665,8 +677,16 @@ ProgramImpl::decode_mtp_batch(std::span<const std::uint32_t> lanes,
                 extent = static_cast<std::uint32_t>(
                     budgets[row].drafts_before_sampling_boundary(proposed).size());
             }
+            // Mapping may publish the compact decode rows; cache positions must be read
+            // after it, while the AR RoPE frontier stays logical.
+            ensure_sequence_kv_mapped(sequence, frontier + extent + 1,
+                                      std::min(capacity, frontier + extent + draft_window),
+                                      /*decode_round=*/true);
             mtp_host_ingress->anchors[row]        = sequence.ledger.back();
-            mtp_host_ingress->base_frontiers[row] = checked_i32(frontier, "MTP batch frontier");
+            mtp_host_ingress->base_frontiers[row] =
+                checked_i32(compact_position(sequence, frontier), "MTP batch frontier");
+            mtp_host_ingress->base_rope_frontiers[row] =
+                checked_i32(frontier, "MTP batch RoPE frontier");
             mtp_host_ingress->remaining_budgets[row] =
                 checked_i32(budgets[row].generated_tokens_remaining, "MTP batch remaining budget");
             mtp_host_ingress->current_extents[row]      = static_cast<std::int32_t>(extent);
@@ -696,8 +716,6 @@ ProgramImpl::decode_mtp_batch(std::span<const std::uint32_t> lanes,
                     {mtp_host_ingress->current_drafts.data() + row * verify_window, extent},
                     device.stream);
             }
-            ensure_sequence_kv_mapped(sequence, frontier + extent + 1,
-                                      std::min(capacity, frontier + extent + draft_window));
         }
 
         qwen3_5::MtpDecodeState frame = io.mtp_decode->verification_view(verify_window);
@@ -1098,16 +1116,22 @@ runtime::ExecutionTiming ProgramImpl::resolve_non_speculative_pending(
         sequence.execution_frontier = request.pending.prompt_tokens;
         sequence.ledger_frontier    = request.pending.prompt_tokens + 1;
         break;
-    case PendingKind::Ordinary:
-        if (ops::detail::kvmem_decode_index_enabled() && retrieval_index && retrieval_harvest) {
-            retrieval_index->append_committed(*retrieval_harvest, request.pending.base_E,
-                                               1, accepted_tokens, device.stream);
+    case PendingKind::Ordinary: {
+        // The harvest staging is shared, the index is THIS lane's: a single-lane
+        // graph wrote row 0; a batch graph would write one row per lane and the
+        // index would consume its own slice (append_committed_slice).
+        auto& retrieval = retrieval_workspace_for_lane(sequence.lane);
+        if (ops::detail::kvmem_decode_index_enabled() && retrieval.index &&
+            retrieval_harvest_staging) {
+            retrieval.index->append_committed(*retrieval_harvest_staging, request.pending.base_E,
+                                              1, accepted_tokens, device.stream);
         }
         advance_rebuild_work(sequence, request.pending.base_E + request.pending.produced,
                              prefill_chunk);
         sequence.execution_frontier = request.pending.base_E + request.pending.produced;
         sequence.ledger_frontier    = request.pending.base_S + request.pending.produced;
         break;
+    }
     case PendingKind::Speculative:
     case PendingKind::None:
         throw std::logic_error("non-speculative pending round has an invalid kind");

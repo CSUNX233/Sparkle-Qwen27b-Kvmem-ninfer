@@ -11,6 +11,7 @@ namespace ninfer::ops::detail {
 
 void mtp_prepare_next_round_launch(const Tensor& verify_ids, const Tensor& next_anchors,
                                    const Tensor& accepted, const Tensor& updated_frontiers,
+                                   const Tensor& logical_frontiers,
                                    const Tensor& remaining_budgets, const Tensor& licensed_counts,
                                    const Tensor& rope_deltas, Tensor& alignment_ids,
                                    Tensor& next_extents, Tensor& ar_positions,
@@ -29,6 +30,7 @@ void mtp_prepare_next_round_launch(const Tensor& verify_ids, const Tensor& next_
         static_cast<const std::int32_t*>(next_anchors.data),
         static_cast<const std::int32_t*>(accepted.data),
         static_cast<const std::int32_t*>(updated_frontiers.data),
+        static_cast<const std::int32_t*>(logical_frontiers.data),
         static_cast<const std::int32_t*>(remaining_budgets.data),
         static_cast<const std::int32_t*>(licensed_counts.data),
         static_cast<const std::int32_t*>(rope_deltas.data),

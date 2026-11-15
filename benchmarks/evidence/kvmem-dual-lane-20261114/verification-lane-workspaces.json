@@ -1,0 +1,162 @@
+{
+ "date": "2026-11-14",
+ "branch": "codex/kvmem-dual-lane",
+ "base_commit": "2d86b7a0e18f96f3f7b4a191f74797f04fc503eb",
+ "stage": "stage 2: per-lane retrieval contexts over one shared raw-K staging buffer",
+ "status": "per-lane index/probe isolation and shared-staging row slices verified on GPU; real dual-request inference NOT enabled",
+ "candidate_engine_sha256": "471e432b0679c5f7b96d133245f036e3c5692157bebde95222f9d81fd8bfe5a1",
+ "candidate_engine": "incremental candidate for the single-lane daily profile; not installed and not a release",
+ "build": {
+  "rebuild_scope": "71 Host units recompiled; 11 CUDA objects reused after source-hash/mtime checks; remaining static libraries retained after SHA-256 checks",
+  "clean_full_build": false,
+  "toolchain": "CUDA 13.0.48; MSVC 14.44.35207; sm120a",
+  "changed_source_sha256": {
+   "engine/src/ops/kvmem/retrieval_workspace.h": "f18cfad9b52273fe74e737abf8c3f94c9a643f21632763c99290aa60afe3b6e8",
+   "engine/src/ops/kvmem/mean_k_index.h": "c488c2139dd2a5fa90ad0d744767aa78a2c7c58328d0d26e6056aecf8abc2660",
+   "engine/src/ops/kvmem/mean_k_index.cpp": "074aa8a061501d7b82c728c66f12efe0a5f5ac45934b35e1a626505d883fd9e5",
+   "engine/src/models/qwen3_5/program/program_impl.h": "4764a5517763e5d546369b6ce2a1c927e2841e4339f9de9e30a316a930513ed8",
+   "engine/src/models/qwen3_5/program/program_impl.cpp": "73879129f09749483bf175f8727b05a5a6117210c7778e194474b136ddec3c72",
+   "engine/src/models/qwen3_5/program/decode.cpp": "bc12cae722f097979a536713c667061b2180cae467ff349cd4d55ae819c4b9bf",
+   "engine/src/models/qwen3_5/program/prefill.cpp": "49fef6baf715a6b416caef123d6d9da99fbc8c2f5a82d978b33fbc578839474e",
+   "engine/src/models/qwen3_5/program/storage/context.cpp": "dcd22520901815c2fa8a02b20aaf7727c7a35a8acc22982686d21d0c59190556",
+   "engine/src/models/qwen3_5/program/transactions/capture.cpp": "504671f7b746b205a258e69a2c5df7e13c7a480676743a42c578a2657a599149",
+   "engine/src/models/qwen3_5/program/transactions/commit.cpp": "2d9d9cddb1bb029d138476e396530b622b34174c86ab9913ecd87040768de8a0",
+   "engine/tests/ops/test_kvmem_lane_workspace.cpp": "1dff10784102546af665d247c93172c419e8c41523b3fbb87cbb332efaea5ef8",
+   "engine/tests/ops/test_kvmem_batch_commit.cpp": "a99a353d88c201cd6303d2d1bad15dc60758f439359937d1825c0d249eef28da",
+   "engine/tests/ops/tests.cmake": "61ee7c047b41f58d83f29b72e9278afdd30b2c4e016867e979dc83edf2ed1882"
+  }
+ },
+ "test_matrix": [
+  {
+   "test": "test_kvmem_workspace",
+   "host_index": "0",
+   "prefetch": "0",
+   "exit_code": 0,
+   "pass_line": "PASS: 62 interleaved appends, two independent CUDA streams, exact index/count oracle, query isolation and inactive-owner release"
+  },
+  {
+   "test": "test_kvmem_workspace",
+   "host_index": "1",
+   "prefetch": "0",
+   "exit_code": 0,
+   "pass_line": "PASS: 62 interleaved appends, two independent CUDA streams, exact index/count oracle, query isolation and inactive-owner release"
+  },
+  {
+   "test": "test_kvmem_workspace",
+   "host_index": "1",
+   "prefetch": "1",
+   "exit_code": 0,
+   "pass_line": "PASS: 62 interleaved appends, two independent CUDA streams, exact index/count oracle, query isolation and inactive-owner release"
+  },
+  {
+   "test": "test_kvmem_lane_workspace",
+   "host_index": "0",
+   "prefetch": "0",
+   "exit_code": 0,
+   "pass_line": "PASS: two lane contexts over one shared staging, exact per-lane row-slice sums, query isolation, rejected-slice rollback, inactive-lane release"
+  },
+  {
+   "test": "test_kvmem_lane_workspace",
+   "host_index": "1",
+   "prefetch": "0",
+   "exit_code": 0,
+   "pass_line": "PASS: two lane contexts over one shared staging, exact per-lane row-slice sums, query isolation, rejected-slice rollback, inactive-lane release"
+  },
+  {
+   "test": "test_kvmem_lane_workspace",
+   "host_index": "1",
+   "prefetch": "1",
+   "exit_code": 0,
+   "pass_line": "PASS: two lane contexts over one shared staging, exact per-lane row-slice sums, query isolation, rejected-slice rollback, inactive-lane release"
+  },
+  {
+   "test": "test_kvmem_batch_commit",
+   "host_index": "0",
+   "prefetch": "0",
+   "exit_code": 0,
+   "pass_line": "PASS: shared harvest consumed by two independent indexes, exact sum/count oracles, zero/no-replay commits, 64-token page crossing, geometry rejection with untouched snapshots (single stream; parallel decode not exercised)"
+  },
+  {
+   "test": "test_kvmem_batch_commit",
+   "host_index": "1",
+   "prefetch": "0",
+   "exit_code": 0,
+   "pass_line": "PASS: shared harvest consumed by two independent indexes, exact sum/count oracles, zero/no-replay commits, 64-token page crossing, geometry rejection with untouched snapshots (single stream; parallel decode not exercised)"
+  },
+  {
+   "test": "test_kvmem_batch_commit",
+   "host_index": "1",
+   "prefetch": "1",
+   "exit_code": 0,
+   "pass_line": "PASS: shared harvest consumed by two independent indexes, exact sum/count oracles, zero/no-replay commits, 64-token page crossing, geometry rejection with untouched snapshots (single stream; parallel decode not exercised)"
+  },
+  {
+   "test": "test_kvmem_score_schedule",
+   "host_index": "0",
+   "prefetch": "0",
+   "exit_code": 0,
+   "pass_line": ""
+  },
+  {
+   "test": "test_kvmem_score_schedule",
+   "host_index": "1",
+   "prefetch": "0",
+   "exit_code": 0,
+   "pass_line": ""
+  },
+  {
+   "test": "test_kvmem_score_schedule",
+   "host_index": "1",
+   "prefetch": "1",
+   "exit_code": 0,
+   "pass_line": ""
+  }
+ ],
+ "all_gpu_tests_passed": true,
+ "lane_workspace_oracle": {
+  "proves": [
+   "two RetrievalWorkspace owners borrow one RawKShadowHarvest staging owner",
+   "each lane MeanKIndex consumes only its own row slice (row 0 and row 1) with exact constant-BF16 F32 sum/count oracles",
+   "query span, generation and kept selections stay per lane across rebinds",
+   "a rejected slice leaves both indexes byte-identical",
+   "destroying an inactive lane does not detach the active lane binding"
+  ],
+  "does_not_prove": [
+   "two simultaneous full-model requests or two captured decode graphs",
+   "two overlapping CUDA kernels",
+   "ring cross-lane page reclamation or batch decode harvesting"
+  ]
+ },
+ "short_smoke": {
+  "passed": true,
+  "scope": "single-lane CPU-vision profile, short greedy outputs only; no parallel Agent or long-context claim",
+  "daily_files_unchanged": true,
+  "baseline_sha256": "f9a6b29cb7755b18ae02dcc130c17b5e28b2c97530c647db9936680bd5c2ad46",
+  "candidate_sha256": "471e432b0679c5f7b96d133245f036e3c5692157bebde95222f9d81fd8bfe5a1",
+  "message_equality": {
+   "short": true,
+   "follow": true,
+   "visual_boundary": true,
+   "prompt_tokens": true
+  },
+  "baseline_peak_gpu_mib": 11234,
+  "candidate_peak_gpu_mib": 11234,
+  "profile_kvmem_switches": "NINFER_KV_WINDOW=19456, NINFER_KVMEM_INDEX_DECODE=1, NINFER_KVMEM_CACHE_QUERY=1 (daily p0_rk4v4_daily)"
+ },
+ "daily_engine_unchanged": {
+  "sha256": "f9a6b29cb7755b18ae02dcc130c17b5e28b2c97530c647db9936680bd5c2ad46",
+  "installed_engine_replaced": false,
+  "launch_or_config_changed": false
+ },
+ "gates_still_closed": [
+  "ProgramImpl constructor rejects KVMem content retrieval when max_concurrency != 1",
+  "startup rejects NINFER_KV_WINDOW when max_concurrency > 1",
+  "kvmem_decode_begin() installs the harvest only for batch_size == 1",
+  "demote_other_addresses_to_host() skips every ACTIVE address"
+ ],
+ "not_verified": [
+  "real dual-request inference, cancellation of one lane, distinct prompts",
+  "batch decode harvest across rows in the product path",
+  "dual-lane Device KV peak, Host KV budget admission, long outputs and recall"
+ ]
+}

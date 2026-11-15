@@ -97,6 +97,7 @@ auto mtp_decode_batch_body(MtpBatchContext& state, std::int32_t batch_size,
         card.set_mtp_attention_window(state.execution.mtp_attention_window);
         Tensor anchors            = frame.anchors.slice(0, 0, batch_size);
         Tensor frontiers          = frame.base_frontiers.slice(0, 0, batch_size);
+        Tensor frontiers_rope     = frame.base_rope_frontiers.slice(0, 0, batch_size);
         Tensor budgets            = frame.remaining_budgets.slice(0, 0, batch_size);
         Tensor current_extents    = frame.current_extents.slice(0, 0, batch_size);
         Tensor target_valid       = frame.target_valid_columns.slice(0, 0, batch_size);
@@ -146,7 +147,9 @@ auto mtp_decode_batch_body(MtpBatchContext& state, std::int32_t batch_size,
                                      .target_tokens           = target_tokens,
                                      .drafts                  = current_drafts,
                                      .current_extents         = current_extents,
-                                     .frontiers               = frontiers,
+                                     // Acceptance keys its RNG by absolute token position and
+                                     // advances this logical base, independently of cache holes.
+                                     .frontiers               = frontiers_rope,
                                      .anchors                 = anchors,
                                      .licensed_tokens         = licensed_tokens,
                                      .licensed_counts         = licensed_counts,
@@ -161,9 +164,10 @@ auto mtp_decode_batch_body(MtpBatchContext& state, std::int32_t batch_size,
         {
             nvtx::ScopedRange draft_range(nvtx::Name::DecodeMtpDraft, nvtx::Category::Mtp,
                                           static_cast<std::uint64_t>(draft_window) * batch_size);
-            ops::mtp_prepare_next_round(verify_ids, anchors, accepted, frontiers, budgets,
-                                        licensed_counts, rope_deltas, alignment_ids, next_extents,
-                                        ar_positions, ar_rope_positions, ar_valid_columns,
+            ops::mtp_prepare_next_round(verify_ids, anchors, accepted, frontiers, frontiers_rope,
+                                        budgets, licensed_counts, rope_deltas, alignment_ids,
+                                        next_extents, ar_positions, ar_rope_positions,
+                                        ar_valid_columns,
                                         static_cast<std::int32_t>(draft_window),
                                         static_cast<std::int32_t>(state.text_cache.max_context()),
                                         state.execution.device.stream);

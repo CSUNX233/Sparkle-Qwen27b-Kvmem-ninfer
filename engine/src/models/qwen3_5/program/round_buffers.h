@@ -58,7 +58,11 @@ struct OrdinaryDecodeEgress {
 // product domain; RoundState binds only the configured [K,C] and [K+1,C] prefixes.
 struct MtpDecodeIngress {
     std::array<TokenId, kMaximumConcurrency> anchors{};
+    // base_frontiers are CACHE positions (compact under KVMem compaction);
+    // base_rope_frontiers are the original logical positions used for AR RoPE
+    // and the context ceiling. Without compaction the two are equal.
     std::array<std::int32_t, kMaximumConcurrency> base_frontiers{};
+    std::array<std::int32_t, kMaximumConcurrency> base_rope_frontiers{};
     std::array<std::int32_t, kMaximumConcurrency> remaining_budgets{};
     std::array<std::int32_t, kMaximumConcurrency> current_extents{};
     std::array<std::int32_t, kMaximumConcurrency> target_valid_columns{};
@@ -246,6 +250,7 @@ struct MtpDecodeState {
     DeviceSpan egress;
     Tensor anchors;
     Tensor base_frontiers;
+    Tensor base_rope_frontiers;
     Tensor remaining_budgets;
     Tensor current_extents;
     Tensor target_valid_columns;

@@ -1,0 +1,82 @@
+{
+ "date": "2026-11-15",
+ "branch": "codex/kvmem-dual-lane",
+ "stage": "stage 9: vision compact, one-lane cancellation, tool continuation, Host admission",
+ "status": "CPU vision, cancellation of one streaming lane and a tool-call continuation pass under compact; the dual-lane Host guard and index-budget log are in; dual-lane MTP+Graph is a capacity limit on 12 GiB",
+ "candidate_engine_sha256": "ae7ebadd06dd761b0ce0f132ecfc9062b1d9a98e4d781b227bd8a15825c4ffb8",
+ "vision_compact": {
+  "candidate_in_that_run": "c79061c683a2160514457ffd7653889a45726b1e2face7629c60020547df53bd",
+  "profile": "daily p0_rk4v4_daily with CPU vision, MTP3 and CUDA Graphs; candidate NINFER_KV_COMPACT=1 vs daily f9a6 mask",
+  "message_equality": {
+   "short": true,
+   "follow": true,
+   "visual_boundary": true,
+   "prompt_tokens": true
+  },
+  "peak_gpu_mib": {
+   "baseline": 11234,
+   "candidate": 11234
+  },
+  "daily_files_unchanged": true,
+  "compact_log": "compact decode view ON, vision model, CPU vision"
+ },
+ "cancel_one_lane": {
+  "candidate_in_that_run": "759a205b0fde5c06f77d68a22501741d2db60dd4ef5757d4984c403fa80dbd2b",
+  "config": "max-concurrency 2, compact, ordinary decode, CUDA Graphs, context 131072, pool 32768, window 8192",
+  "a_cancelled": "client closed the SSE stream after 18 s; server logged HTTP 499 client disconnected",
+  "b_completed_tokens": 1207,
+  "b_code_found": true,
+  "short_after_cancel": {
+   "content": "READY",
+   "refusal": null,
+   "role": "assistant"
+  },
+  "fatal": false,
+  "daily_engine_unchanged": true
+ },
+ "tool_continuation": {
+  "candidate_in_that_run": "759a205b0fde5c06f77d68a22501741d2db60dd4ef5757d4984c403fa80dbd2b",
+  "profile": "daily p0_rk4v4_daily (MTP3 + CUDA Graphs), compact on, text only",
+  "first_tool_call": {
+   "function": {
+    "arguments": "{\"path\":\"src/app.py\"}",
+    "name": "read_file"
+   },
+   "id": "call_51322e4d3c98cd06",
+   "type": "function"
+  },
+  "first_prompt_tokens": 799,
+  "second_prompt_tokens": 905,
+  "second_prompt_cache": "846 of 905 tokens (93.5%, private endpoint)",
+  "second_answer": {
+   "content": "ZQ-4242",
+   "reasoning_content": "The user is asking for the ACCESS_CODE from the file. It's \"ZQ-4242\". Reply with only the code.\n",
+   "refusal": null,
+   "role": "assistant"
+  },
+  "second_finish": "stop",
+  "daily_engine_unchanged": true
+ },
+ "host_admission": {
+  "guard": "finalize_sequence_plan now requires host_pages + pool_pages >= lanes * logical_pages when compact has more than one lane",
+  "index_budget_log": "compact startup reports mean_k_index_bytes per lane and the lane total (lazy allocation)",
+  "dual_262144_runtime_limits": {
+   "eager": "1,298,848,000 B required vs 1,151,336,448 B available",
+   "graph": "1,365,956,864 B required vs 1,151,336,448 B available"
+  },
+  "dual_131072_eager": "fits and passed the two-lane MTP batch",
+  "dual_131072_graph": "allowance 64: 1,209,948,416 B required; allowance 128: 1,277,057,280 B; no allowance: 2,715,703,552 B; available 1,151,336,448 B -> does not fit; the eager 131K dual batch fits"
+ },
+ "daily_engine_unchanged": {
+  "sha256": "f9a6b29cb7755b18ae02dcc130c17b5e28b2c97530c647db9936680bd5c2ad46",
+  "installed_engine_replaced": false,
+  "launch_or_config_changed": false
+ },
+ "does_not_prove": [
+  "vision with a prompt larger than the window (compact holes with images)",
+  "dual-lane vision or dual-lane MTP with CUDA Graphs on this 12 GiB card",
+  "cancellation during MTP or during prefill",
+  "a multi-turn agent tool loop beyond the fixed read_file flow",
+  "Host KV admission at 256K dual lane (the guard refuses only if host+pool is short; the GPU runtime failed first at 262K)"
+ ]
+}

@@ -278,6 +278,8 @@ MtpDecodeState::MtpDecodeState(DeviceSpan backing, const MtpDecodeStateLayout& l
     anchors = ingress_tensor(offsetof(MtpDecodeIngress, anchors), DType::I32, {batch});
     base_frontiers =
         ingress_tensor(offsetof(MtpDecodeIngress, base_frontiers), DType::I32, {batch});
+    base_rope_frontiers =
+        ingress_tensor(offsetof(MtpDecodeIngress, base_rope_frontiers), DType::I32, {batch});
     remaining_budgets =
         ingress_tensor(offsetof(MtpDecodeIngress, remaining_budgets), DType::I32, {batch});
     current_extents =

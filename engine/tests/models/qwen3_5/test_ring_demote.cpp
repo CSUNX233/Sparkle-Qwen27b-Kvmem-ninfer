@@ -92,9 +92,14 @@ void exercise(unsigned batch, bool tight, bool require_batched) {
             1,20,prefer,batch,&duplicates)==20,"repeat demotion must reuse current Host replicas");
         check(duplicates.copy_batches==0&&duplicates.copied_pages==0,"Host duplicates copied again");
         const std::array<std::uint32_t,0> no_preferences{};
+        const auto protected_freed=s::demote_ring_pages(addresses,pages,*active,extents,device.stream,
+            1,100,prefer,batch,nullptr,true);
+        check(protected_freed==7,"hard preferences must release only the remaining cold pages");
+        for(auto page:prefer) check(pages.device_resident(addresses.logical_page(*active,page)),
+            "hard preferences must not sacrifice configured history to finish reclamation");
         const auto extra=s::demote_ring_pages(addresses,pages,*active,extents,device.stream,
             1,100,prefer,batch);
-        check(extra==10,"second pass must reclaim preferred pages only when needed");
+        check(extra==3,"legacy second pass must retain its preferred-page fallback");
         check(pages.device_resident(addresses.logical_page(*active,0))&&pages.device_resident(pinned)&&
             pages.device_resident(addresses.logical_page(*active,32)),"second pass violated protected pages");
         check(s::demote_ring_pages(addresses,pages,*active,extents,device.stream,
@@ -104,6 +109,43 @@ void exercise(unsigned batch, bool tight, bool require_batched) {
     // so finish those copies before its memory can be freed and reused by the next case.
     device.synchronize();
     pages.unpin_source(pinned);
+}
+void shared_active_prefix() {
+    ninfer::DeviceContext device(0);
+    ninfer::LayoutBuilder builder;
+    const auto layout = ninfer::plan_device_kv_page_pool(builder, {
+        .page_group_count=8, .allow_logical_reservation=true,
+        .geometry={.page_tokens=64, .device_plane_order=ninfer::PagedKVPlaneOrder::PageMajor,
+            .planes={{ninfer::DType::BF16,8,2}}}});
+    const auto rows = ninfer::plan_kv_execution_tables(builder,
+        {.logical_page_capacity=16,.table_rows=2});
+    ninfer::DeviceArena arena(builder.finish(256));
+    ninfer::DeviceKVPagePool physical({arena.base(),arena.capacity()},layout);
+    ninfer::KVExecutionTablePool tables({arena.base(),arena.capacity()},rows,physical);
+    const auto host_layout = ninfer::plan_host_kv_page_layout(physical.geometry());
+    const std::array layouts{host_layout};
+    ninfer::HostKVArena host(8*host_layout.page_stride,layouts);
+    s::LogicalKVPageStore pages(physical,32);
+    s::HostKVExtentStore extents(host,32);
+    s::KVAddressSpaceStore addresses(pages,tables,4,16);
+    const auto a=addresses.create_active(4,0,{});
+    check(a.has_value(),"shared active fixture");
+    addresses.ensure_mapped_to_tokens(*a,256,device.stream);
+    addresses.commit_frontier(*a,256);
+    addresses.deactivate(*a);
+    const auto b=addresses.create_inactive();
+    check(b.has_value(),"second prefix owner");
+    auto fork=addresses.prepare_prefix_fork(*a,*b,128,2,1);
+    addresses.commit_prefix_fork(std::move(fork),device.stream);
+    addresses.activate(*a,4,0,device.stream);
+    const auto first=addresses.logical_page(*a,0);
+    check(pages.active_address_references(first)==2,"both lanes own the shared prefix");
+    const auto freed=s::demote_ring_pages(addresses,pages,*a,extents,device.stream,
+        0,4,{},32,nullptr,true);
+    check(freed==2,"only this lane's exclusive pages can be reclaimed");
+    check(pages.active_address_references(first)==2 && pages.device_resident(first),
+        "reclamation must preserve the other active lane and both active references");
+    device.synchronize();
 }
 } // namespace
 
@@ -121,6 +163,7 @@ int main(int argc,char** argv) {
         const bool require_batched=argc>2;
         exercise(batch,false,require_batched);
         exercise(batch,true,false);
+        shared_active_prefix();
         std::cout<<"PASS payload roundtrip, Host exhaustion, sink, preferred pages, source pin and partial tail\n";
         return 0;
     } catch(const std::exception& error) {std::cerr<<"FAIL "<<error.what()<<std::endl;return 1;}

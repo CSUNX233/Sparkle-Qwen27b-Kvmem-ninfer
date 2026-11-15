@@ -1,5 +1,12 @@
 # HTTP serving
 
+Downstream experiment: `NINFER_KV_COMPACT=1` preserves separate sink, recent and retrieval
+budgets plus a contiguous pending suffix. Pool admission includes per-lane scratch pages;
+insufficient capacity is rejected rather than reducing those budgets. Text and MTP tables
+return to logical coordinates for prefill/control. This remains experimental; GPU vision and
+multi-lane decode indexing are not enabled. See `../../docs/KVMEM_DUAL_LANE_FIXES.md` for
+qualification and limitations.
+
 `build/apps/ninfer-serve` loads one v3 `.ninfer` artifact and exposes OpenAI- and
 Anthropic-compatible HTTP endpoints over one resident NInfer Engine.
 
@@ -64,8 +71,11 @@ These allocations are independent of `--host-kv-mib` and are reported by the
 `kvmem_index` warmup log. `NINFER_KVMEM_INDEX_TIMING=1` enables diagnostic CUDA
 event timing of copies and exposed compute-stream waits outside capture;
 leave it unset during ordinary inference and end-to-end benchmarking. `NINFER_HOST_PAGEABLE=1` does not
-make this index pageable. The existing ring index is process-local and shared;
-this option does not add concurrent sequence support. Qualify long-context
+make this index pageable. A Product Program owns one retrieval context per lane
+(mean-K index and query/score state); the raw-K staging buffer is shared because
+a captured decode graph bakes its address. The ring still serves only one active
+sequence, and batch decode does not yet harvest per-lane rows. This option does
+not add concurrent sequence support. Qualify long-context
 recall and end-to-end performance before increasing the Device KV pool.
 
 Other artifacts use the same command shape with their own path. For 35B-A3B DFlash, replace the MTP

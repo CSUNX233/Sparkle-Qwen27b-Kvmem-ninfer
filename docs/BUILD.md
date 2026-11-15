@@ -1,5 +1,9 @@
 # 从源码编译
 
+双路 compact 页边界与质量预算修复新增 `ninfer_qwen3_5_kvmem_compact_selection_test`（无需GPU），并扩充 compact-view/ring-demote 和 MTP 逻辑位置 GPU 回归。正常构建后可运行 `ctest --test-dir runtime/build --output-on-failure -R '(qwen3_5_(kvmem_compact_(selection|view)|ring_demote)|mtp_round)_test$'`。本机隔离增量构建和模型验证边界见 [修复说明](KVMEM_DUAL_LANE_FIXES.md)，不等同干净发布构建。
+
+双路研究分支的工作区封装、每路检索上下文、compact execution view 与增量构建范围见 [KVMem 双路研究](KVMEM_DUAL_LANE_RESEARCH.md)。新增 GPU 用例可在正常 CMake 构建中以 `ninfer_kvmem_workspace_test`、`ninfer_kvmem_lane_workspace_test`、`ninfer_kvmem_batch_commit_test` 和 `ninfer_qwen3_5_kvmem_compact_view_test` 运行；它们只验证工作区/索引归属、行切片与 store 级 compact 视图，不代表已支持两个模型请求同时解码。
+
 ## v1.1.0 源码状态
 
 v1.1.0 源码标签以固定 `c287b7d` 为基线，叠加两个补丁：

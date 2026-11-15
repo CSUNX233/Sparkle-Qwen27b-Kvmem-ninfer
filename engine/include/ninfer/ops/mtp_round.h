@@ -14,12 +14,17 @@ namespace ninfer::ops {
  *     alignment_ids[j,b] = verify_ids[j+1,b]  for 0<=j<A
  *                          next_anchors[b]     otherwise;
  *     remaining_after = max(remaining_budgets[b]-L,0);
- *     context_after   = max(max_context-updated_frontiers[b]-1,0);
+ *     logical_after   = logical_frontiers[b];
+ *     context_after   = max(max_context-logical_after-1,0);
  *     next_extents[b] = min(P,max(remaining_after-1,0),context_after);
  *     For S=max(P-1,1) and 0<=s<S:
- *       ar_positions[b,s]      = updated_frontiers[b]+s;
- *       ar_rope_positions[b,s] = ar_positions[b,s]+rope_deltas[b];
+ *       ar_positions[b,s]      = updated_frontiers[b]+L+s;
+ *       ar_rope_positions[b,s] = logical_after+s+rope_deltas[b];
  *       ar_valid_columns[b,s]  = (s+1 < next_extents[b]).
+ *   `updated_frontiers` carries the CACHE BASE (compact when KVMem compaction is on);
+ *   `logical_frontiers` carries logical AFTER: acceptance used the absolute logical
+ *   base for RNG and advanced it by L. The cache base is independently advanced by L.
+ *   Without compaction, updated_frontiers + L = logical_frontiers.
  *   K is the round's verification width and P = proposal_drafts the drafts the next round
  *   proposes. The two are independent: an adaptive round verifies fewer drafts than the window
  *   it proposes, and an ngram copy round verifies more.
@@ -36,10 +41,11 @@ namespace ninfer::ops {
  */
 void mtp_prepare_next_round(const Tensor& verify_ids, const Tensor& next_anchors,
                             const Tensor& accepted, const Tensor& updated_frontiers,
-                            const Tensor& remaining_budgets, const Tensor& licensed_counts,
-                            const Tensor& rope_deltas, Tensor& alignment_ids, Tensor& next_extents,
-                            Tensor& ar_positions, Tensor& ar_rope_positions,
-                            Tensor& ar_valid_columns, std::int32_t proposal_drafts,
-                            std::int32_t max_context, cudaStream_t stream);
+                            const Tensor& logical_frontiers, const Tensor& remaining_budgets,
+                            const Tensor& licensed_counts, const Tensor& rope_deltas,
+                            Tensor& alignment_ids, Tensor& next_extents, Tensor& ar_positions,
+                            Tensor& ar_rope_positions, Tensor& ar_valid_columns,
+                            std::int32_t proposal_drafts, std::int32_t max_context,
+                            cudaStream_t stream);
 
 } // namespace ninfer::ops
