@@ -17,6 +17,8 @@ NInfer inference · KVMem tiered KV · MTP3 speculative decoding · dsh Agent wo
 
 > **The logical context is 256K, but not every step reads all history.** KVMem keeps cold KV in Host RAM and retrieves pages into GPU memory. This reduces repeated prefill; it is not a completed full-256K validation and does not guarantee that every task is faster.
 
+> **Need two concurrent sequences?** Use the [`kvmem-dual-lane`](https://github.com/CSUNX233/Sparkle-Qwen27b-Kvmem-ninfer/tree/kvmem-dual-lane) branch; `main` remains the single-lane daily build and the branch is not merged. It is a controlled-trial candidate and requires `NINFER_KV_COMPACT=1`. On 12GB it was validated with 2×40K prompts and MTP3 eager (131K context / 32K pool); the full 16GB budget and dual MTP+Graph remain unvalidated. Build notes and limits are in the branch's [dual-lane handoff](https://github.com/CSUNX233/Sparkle-Qwen27b-Kvmem-ninfer/blob/kvmem-dual-lane/docs/KVMEM_DUAL_LANE_HANDOFF.md).
+
 **Source update, 2026-11-14 (no new Release):** Local automatic-compaction failures now stop the turn while preserving history. State cards batch tool results, emit ordinary checkpoints after eight successful edits/writes, and deduplicate failures; successful reads/shell calls no longer trigger periodic cards. All 28 focused tests pass; the reported long-task failure has not been reproduced on the affected PC. See [scope and limitations](docs/DSH_COMPACTION_CANDIDATE_20261114.md). This updates DSH modules and patches; replacing the engine executable alone does not apply it.
 
 ## At a glance
