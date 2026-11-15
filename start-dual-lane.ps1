@@ -10,6 +10,9 @@ param(
     [int]$MaxContext = 262144,
     [int]$DeviceKV = 78336,
     [int]$HostKVMiB = 7168,
+    [int]$SinkTokens = 12288,
+    [int]$RecentTokens = 19456,
+    [int]$RetrieveTokens = 6144,
     [int]$CudaGraphAllowanceMiB = 64,
     [switch]$Graph,
     [switch]$GdnFp16,
@@ -73,14 +76,16 @@ $apiKey = (Get-Content -LiteralPath $ApiKeyFile -Raw).Trim()
 if ([string]::IsNullOrWhiteSpace($apiKey)) { throw ('API key file is empty: ' + $ApiKeyFile) }
 
 # 16GB planning profile:
-#   Main pool 78,336 tokens = 1,224 pages, two lanes x 39,168.
-#   Per-lane quality budgets (sink 12,288 + recent 19,456 + retrieve 6,144 + pending/slack).
-# If startup is OOM, try -DeviceKV 65536, -MaxContext 131072, -GdnFp16, or -NoGraph.
+#   pages/lane = ceil(sink/64) + ceil(recent/64) + ceil(retrieve/64) + 3 pending + 8 slack.
+#   Keep DeviceKV / 2 / 64 >= pages/lane.
+#   Default: 192 + 304 + 96 + 11 = 603 pages/lane; 78,336 tokens = 612 pages/lane.
+#   Example quality step: -RecentTokens 28672 -DeviceKV 98304 (747 pages/lane, 768 available).
+#   If startup is OOM, try -DeviceKV 65536, -MaxContext 131072, -GdnFp16, or omit -Graph.
 $env:NINFER_KV_COMPACT = '1'
 $env:NINFER_KV_RING = '1'
-$env:NINFER_KV_SINK = '12288'
-$env:NINFER_KV_WINDOW = '19456'
-$env:NINFER_KV_RETRIEVE = '6144'
+$env:NINFER_KV_SINK = [string]$SinkTokens
+$env:NINFER_KV_WINDOW = [string]$RecentTokens
+$env:NINFER_KV_RETRIEVE = [string]$RetrieveTokens
 $env:NINFER_TERNARY_KVMEM = '1'
 $env:NINFER_TERNARY_KVMEM_SCORE = '1'
 $env:NINFER_KVMEM_CACHE_QUERY = '1'
@@ -149,6 +154,7 @@ if ($DryRun) {
     Write-Host ('Engine: ' + $enginePath)
     Write-Host ('Model:  ' + $modelPath)
     Write-Host ('ModelId: ' + $ModelId)
+    Write-Host ('KV:     sink=' + $SinkTokens + ' recent=' + $RecentTokens + ' retrieve=' + $RetrieveTokens + ' pool=' + $DeviceKV)
     Write-Host ('Args:   ' + ($redacted -join ' '))
     return
 }
@@ -161,7 +167,8 @@ try {
 
     $records = New-Object 'System.Collections.Generic.List[object]'
     try {
-        Write-Host 'Starting dual-lane engine (2 x 39,168 tokens, MTP3, CPU vision) ...'
+        Write-Host ('KV budget: sink=' + $SinkTokens + ' recent=' + $RecentTokens + ' retrieve=' + $RetrieveTokens + ' pool=' + $DeviceKV)
+        Write-Host ('Starting dual-lane engine (pool ' + $DeviceKV + ', MTP3, CPU vision) ...')
         Write-Host 'Note: dual-lane + CPU vision is allowed by the compact gate but is not covered by the final dual-lane validation; smoke-test a short image request first.'
         $records.Add((Start-OwnedProcess 'engine-dual' $enginePath $engineArgs $modelPath (Split-Path $enginePath -Parent)))
         Write-LocalJson (Join-Path $script:RuntimeRoot 'processes.json') @($records.ToArray())
