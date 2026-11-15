@@ -1,75 +1,45 @@
 # dsh、搜索、浏览器与缓存续接
 
-首次部署、排查变慢或工具故障时，先看 [部署与维护交接手册](../docs/DEPLOYMENT_AGENT_GUIDE.md)，按引擎 → 守卫 → dsh → 工具逐层验收。
+首次部署与排障先看 [部署与维护手册](../docs/DEPLOYMENT_AGENT_GUIDE.md)。DSH 固定为 `@deepseek-ai/dsh@0.1.5-rc.3`，依赖以 lockfile 为准；引擎、守卫、DSH 和工具须分开验收。
 
-`setup.ps1` 在本目录的 `dsh/` 用固定 lockfile 安装 `@deepseek-ai/dsh@0.1.5-rc.3`；程序生成独立的 `runtime/dsh-home`，不接管已有 dsh 安装。仅对匹配版本应用分享包的 compaction / tool-result-pruner 修复，保留 DeepSeek MIT 许可和本地原文件备份。
+## 2026-11-15：撤除重复任务注入
 
-`scripts/configure-dsh.mjs` 生成本地模型路由、256K 上下文、73728 最大输出、约 184320 压缩阈值及 32768 摘要上限。启动前同步安装路径，保留与本安装器无关的 patch 项。若修改模型/上下文，需同时核对输出预留和压缩策略；不能把逻辑上限当成实际可用输入长度。
+已删除 `state-card`、`task-ledger`、`todo-completion` 本地模块和截图后的续作提醒，web profile 同时禁用原生 `repeat-tool-reminder`。这些插件虽然标记 `source.kind=plugin`，在 pi-ai 序列化后仍是普通 `role=user`；反复重述目标或要求继续，可能让模型把检查点理解成用户再次催改。当前不再提供重新启用状态卡的开关，旧 `StateCard` / `TaskLedger` 字段被忽略。历史实验报告保留，它们不能证明真实长任务不会退化。
 
-`cache_guard.mjs` 保持已发送前缀稳定。默认关闭基于近似前缀比例的修复；保留上游“严格等价消息”以及特定工具裁剪标记的恢复逻辑。后者可能把明确由 pruner 裁短的内容恢复为原先已发送的全文，以换取缓存复用，受 210000-token 守卫上限控制。真正编辑、压缩、替换图片等应重新计算相应前缀；守卫不能让不同 token 前缀安全共享 KV。
+`tool-grounded-execution` 只保留稳定的系统指导，不再监听截图或追加用户消息。`edit-guard` 保留工具执行前的精确替换校验及错误反馈；`tool-call-recovery` 保留畸形调用的非执行错误路径，连续四次格式错误停止当前轮。正常工具返回、用户消息、计划/审批机制及必要的压缩摘要继续使用。
 
-客户端断开未完成的请求时，守卫会关闭对应上游连接，覆盖排队、等待首包和流式生成阶段；正常完成不触发取消。上游流中途失败时终止连接，避免继续等待或在 SSE 后拼入 JSON 错误。引擎仍须实际响应断连，守卫不直接终止进程。
-
-`local-web/web-provider.mjs` 在本机访问公开 Bing 页面/RSS并提取网页；它依赖真实互联网和网页结构，不是 SearXNG 实例，不包含离线搜索索引。无付费 API。`local-web/browser-server.mjs` 为 stdio MCP，提供打开、快照、动作、evaluate、截图和状态工具；浏览器由本机 Edge 运行，按需启动、空闲退出。DOM 文本可供纯文字模型使用；截图保存到本地不表示纯文字模型能看图。
-
-`local-agent/todo-completion.mjs` 在普通回合交付时仍有未完成待办的情况下追加至多一次提醒。由模型依据真实结果更新列表，补丁不自动把工作标为完成；计划模式、取消、失败与截断不触发强制收尾。
-
-## 工具验证与分步执行
-
-`local-agent/tool-grounded-execution.mjs` 为 `ninfer-local` Agent 注册固定系统规则：下一步明确时先读取、实现或测试，以新证据继续推理；从可验证的小步推进到完整交付。复杂算法、架构、相互约束和风险仍应充分思考，验证、计划模式和授权规则继续适用。其他 preset/provider 和没有 Agent 的辅助请求不加入这段规则。
-
-**保留 xhigh、采样参数和 73728 最大输出额度。** 插件不设置思考长度上限、不强制工具调用、不截断生成，也不额外发起模型请求。它是行为引导，不能保证所有任务收敛或质量完全等价。固定规则在本机 count-only 接口测得增加 **272 个提示 token**；已有会话首次换用新系统提示可能重算发生变化的前缀，后续工具轮次文本保持一致，不引入动态计数提醒。插件不分配 GPU buffer，模型仍需处理新增提示 token。
-
-安装和每次启动通过 `scripts/configure-dsh.mjs` 自动接入，模块 URL 带内容哈希，重复生成不会重复注册。默认启用；要**持久停用**，在本安装的 `config/local.json` 中加入或修改 `"ToolGroundedExecution": false`，再执行 `node .\scripts\configure-dsh.mjs`，或下次启动时自动应用。网页 profile 支持 live patch reload。改回 `true` 可恢复；旧配置缺少此字段时默认启用。不要仅删除生成的 patch 项，下一次启动会重新生成。
-
-真实 dsh 隔离开发任务中，两种条件都通过 7 项验收，实际规则只在启用轮进入请求；还检查了网页/命令行识别、其他路由隔离、固定文本及卸载重载。每种条件只跑一轮，首次写文件反而更晚，不据此宣称普遍提速或质量不变。[完整测量边界与数据](../docs/BENCHMARKS.md#dsh-工具验证执行规则2026-10-15)。
-
-后续补充：成功执行 `mcp__browser__browser_screenshot` 且仅返回截图路径时，在工具结果**尾部追加一次验收续接信息**，带上当前轮最近成功修改的文件定位；原系统规则保持逐字相同，不改旧消息。提醒区分“截图已保存”和“已看图验证”，要求从当前进度继续，存在具体失败证据或新需求时仍可重新修改。失败、取消、计划模式、其他模型 preset 及已有图像结果不添加这条信息，也不自动宣布任务完成。每次匹配的截图增加少量提示 tokens，不新增模型请求、不限制思考深度；无法保证所有长任务都不再重新规划。
-
-HTTP 回归测试无需 GPU 或 npm 依赖；完整 dsh 流水线测试需先完成本目录 dsh 安装：
+源码安装在下次运行 `scripts/configure-dsh.mjs` 时清除旧 loader 项。仅修复现有 profile、保留模型配置时使用：
 
 ```powershell
-node --test integrations/tests/cache-guard.test.mjs
-node --test integrations/tests/tool-grounded-execution.test.mjs
+node scripts/remove-dsh-reminders.mjs
+# 独立旧安装示例（指定实际目录）：
+node scripts/remove-dsh-reminders.mjs --home D:\AI\dsh\home --dsh D:\AI\dsh
 ```
 
-测试覆盖断连传播、正常/异常流、既有消息前缀、真实 Cordis/Tools 提醒接入及卸载重载。截图后原长任务的行为与选择性 KV 召回质量仍需单独验证，不能将离线流水线检查当作长上下文质量证明。
+迁移器备份原始 `cordis.patch.yml`，删除上述提醒及旧 `early-stop-recovery`，将执行指导指向本次无截图钩子的模块，保留其余插件。不要在正在执行任务时迁移。原会话中已经写入的提醒不会删除；停止后重新启动 DSH 才能保证旧进程中的回调全部卸载。恢复可复制备份 profile；同时保留其引用的旧模块。
 
-安装不包含女娲或人物技能；生成的 AGENTS 明确仅在用户点名时才允许启用女娲。浏览器核显偏好由用户在 Windows 中配置，脚本不改全局代理或 GPU 设置。
+## 配置与验证范围
 
-许可：dsh 及其派生 patch 文件为 MIT；新接入代码为 Apache-2.0；npm 依赖保留各自许可证。详情见根目录 NOTICE 与 `licenses/`。
+`local-agent/initial-context-order.mjs` 修正新会话的检索查询来源：DSH 原先把技能目录等背景消息放在真实任务之后，pi-ai 又把它们全部编码为普通 `user`，使 NInfer 的“最后用户消息”查询落到技能目录。现在仅在 `ninfer-local` 首次接收纯文本任务时，将已识别的背景信息放在真实任务前面。原文、消息数量、工具和模型参数不变；顺序在首次落库前确定，后续请求沿用相同前缀，不改写已有会话。图片、计划模式、其他预设和未知来源保持原处理方式。
 
-## 执行前校验与多动作账本（v1.0.0）
+**该顺序修复保留为候选，默认关闭，当前不建议加入日常。** 显式设置 `"InitialContextOrder": true` 才会由配置生成器启用；已有安装也可用 `node scripts/remove-dsh-reminders.mjs --fix-query-origin` 明确试用，组合上面的 `--home` / `--dsh` 路径参数。该选项只更新 profile 和模块引用，不重写模型配置。已有会话不会重新排序，需要新会话才能试用首次顺序修复。
 
-`local-agent/edit-guard.mjs` 只在最新用户明确要求“单文件精确替换”（只改/只修改/唯一/only 等）且会话已有目标文件读取证据时介入：在工具执行前校验目标路径、动作、old/new 范围和新文件精确内容；不匹配则 deny 并返回目标/old/new/范围，不改写参数、不静默替换路径。多文件任务（2 个以上明确文件路径）自动让路；用户主动换目录、重命名、新文件以最新用户指令为准。执行后用保存内容做一次验收。诊断日志目录可用 `EDIT_GUARD_LOG_DIR` 指定，默认写入系统临时目录下的 `ninfer-edit-guard`。
+当前工作树已通过 49 项确定性检查，包括真实网页预设、原生 shell 工具及 HTTP 适配器的两步验证。实模请求也已确认“全部消息文本相同、其他请求字段相同、真实任务成为最后用户消息”。首轮输出由约 5.7 万变成 7.2 万 token，尚不能证明整体质量和速度受益；长测已按用户要求收尾，保留报告，不把查询来源正确等同于所有任务都会收敛。[结果与日常建议](../docs/DSH_QUERY_ORIGIN_20261115.md)
 
-`local-agent/task-ledger.mjs` 解析最新用户指令里的 move/edit/write 动作，从成功工具结果标记完成项；在 `agent/turn-stopping` 时如果还有未完成动作，注入一条结构化“剩余动作”提醒。它不执行工具、不改写参数、不自动补写文件；plan mode 下不介入。
+`configure-dsh.mjs` 面向本 checkout 的隔离 `runtime/dsh-home`，会生成模型路由等设置；只想撤除提醒时应使用上面的窄迁移器。当前最大输出 73728，压缩阈值约 184320；已有 preset 不自动覆盖。保留 xhigh、采样、视觉 CPU/GPU 选择、页池和 Host KV。
 
-工具主动结束回合时，账本不注入续作提醒，避免重新启动本应暂停的任务。
-
-两者都不额外发起模型请求、不分配 GPU buffer；解析是启发式的，可能误拦或误判，deny 会给出精确证据供模型/用户纠正。真实 dsh 交互仍需单独验收。
+压缩失败时阻止继续发送未压缩的超长历史，保留原始事件和已经提交的 checkpoint。该保护仍保留，不能据此宣称摘要生成本身永不失败。未闭合工具壳后回落正文是独立的引擎解析问题；不把普通代码答案自动执行为工具。
 
 ```powershell
-node --test integrations/dsh/local-agent/tests/*.test.mjs
+node --test integrations/tests/*.test.mjs integrations/dsh/local-agent/tests/*.test.mjs
 ```
 
-此前仓库记录的验收为 24/24（edit-guard 10、task-ledger 4、state-card 10）。停用：从网页 profile 删除对应 `id: edit-guard` / `id: task-ledger` 项并重载；升级引擎的查询开关在启动前清除 `NINFER_KVMEM_QUERY_MODE`、`NINFER_KVMEM_SUFFIX_REFRESH`、`NINFER_KVMEM_QUERY_ASSEMBLE` 并重启。
+确定性检查覆盖真实 Cordis 工具/提示流水线、实际 pi-ai 用户角色转换、迁移幂等性、配置保留、压缩失败及工具恢复。真实长任务对照另行记录，不把这些检查当成实模质量结论。
 
-## 畸形工具调用恢复
+## 搜索、浏览器和守卫
 
-`local-agent/tool-call-recovery.mjs` 处理本地引擎返回的 `malformed_tool_call` 保留错误标记。它不将该标记注册进模型可用工具，不自动执行或补全缺失参数；dsh 返回明确的失败原因和重试提示。当前回合连续出现四次该标记时，使用 dsh 的取消接口中止当前回合并提示任务未完成，保留已排队消息。dsh 不会自动唤醒之前已排队的消息，用户可再发送“继续”唤醒；普通工具调用或新的用户回合会重置连续计数。状态卡不再将此错误标记当作一次真实工具操作。由 `scripts/configure-dsh.mjs` 加入 web profile；手动安装时加入 `id: tool-call-recovery`，移除该条可停用。
+`local-web/web-provider.mjs` 使用本机网络抓取公开页面；无付费 API，也不提供离线搜索。`browser-server.mjs` 通过本机 Edge 提供 MCP 浏览器工具。截图路径不是图像像素，更不等于视觉验收通过。驱动、代理和浏览器 GPU 偏好由用户控制。
 
-这是针对解析错误反馈和同类连续失败的保护，不保证模型不会生成畸形调用，也不覆盖任意其他失败、所有长任务或直连引擎 API 的客户端。插件不更改模型、采样、GPU 页池或工具参数；真实重试仍需推理。
+`cache_guard.mjs` 保留等价消息及明确 pruner 裁剪标记的缓存恢复，预算上限 210000。真实编辑、压缩或换图需要重新计算相应前缀；守卫不是质量评分器，不能解决模型重复改写。客户端中途断连会关闭对应上游连接；正常完成不触发取消。
 
-## 确定性状态卡（v1.1.0 / 触发修复 v0.1.3）
-
-`local-agent/state-card.mjs` 在显著工具结果后追加一条 `source.plugin = local-state-card` 的确定性用户消息，内容为目标、当前文件、最近尝试、最后成功/错误、代码签名与常量摘要。当前实现会在 `write`/`edit`、每 3 次 `pwsh`/`bash` 后触发；错误摘要会记入状态，但由于触发判断使用的 `entry.error` 与实际记录的 `entry.ok` 字段不一致，不能保证每次错误立即触发。此处暂不增加额外消息，以免改变长任务的注入频率。**v0.1.3 修复**：原实现用 `attempts.length % 3` 判断，而 `attempts` 最多保留 8 条，存满后长度恒为 8，普通 shell 调用不再触发；现在使用独立 `shellCalls` 计数器（不受 8 条上限影响）。相同内容去重，单卡上限 1900 字符。它不修改历史、工具参数、系统提示、采样、KV 或工具 schema，也不执行工具或额外发起模型请求。
-
-- **嵌套结果**：递归展开 web/headless 的 `tool-result.content`，否则错误与代码摘要会得到空文本。
-- **媒体保护**：会话一旦包含图片（用户消息或工具结果中的 image block），停止注入状态卡，避免在视觉会话里改变消息/token 边界。该保护只影响新注入，不能修复已经压缩或已包含状态卡的旧会话。
-- **计划模式**：plan 模式不注入。
-- 安装器默认把 `state-card` 加入生成的 web profile；在 `config/local.json` 设置 `"StateCard": false` 并重新运行 `scripts/configure-dsh.mjs` 可持久停用，或在启动前设置 `LOCAL_STATE_CARD=0` 临时停用。手动 profile 可参考 `integrations/dsh/state-card.example.yml`。
-
-5 次多文件重构 A/B（headless，独立目录，state-card + 临时放宽 pruner 的 P0 条件）均值为：P0 15.8 步 / 23.4 次工具 / 0.8 次重复 / 43,164 上下文 / 260 秒；baseline 16.0 / 25.4 / 2.40 / 53,825 / 348 秒；两边 5/5 测试通过。步数只下降 1.3%，范围重叠（baseline r3/r4 已达 15 步/0 重复/36K，P0 r4 反而 19 步），**n=5 不构成统计显著**；方向性信号是重复调用、上下文、输出和耗时更低。详细限制见[质量保真记录](../docs/QUALITY_FIDELITY_V1.1.0.md)。
-
-pruner 阈值放宽与 `pruner-bridge.mjs` 只保留在实验层，**未并入 web profile**；不要把它们的行为归因于 state-card。另有一个已记录的多图 + compaction 后 `scatter` 失败，当前处理是开新会话并使用带媒体保护的 state-card v0.1.3；根因仍在引擎视觉/状态张量路径，详见同一记录。
+不安装女娲或人物技能。DSH 与派生 patch 保留 MIT 许可，新接入代码使用 Apache-2.0；见根目录 NOTICE 与 licenses。

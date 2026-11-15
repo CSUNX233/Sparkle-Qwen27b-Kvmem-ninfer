@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import crypto from 'node:crypto';
+import { removeInjectedReminders } from './remove-dsh-reminders.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dsh = path.join(root, 'integrations/dsh');
@@ -125,18 +126,17 @@ const entries = [
   { id: 'web', config: { searchProvider: 'local-free', fetchProvider: 'local-http' } },
   { id: 'web-search-deepseek', disabled: true },
   { id: 'web-fetch-http', disabled: true },
+  // Repeated synthetic user reminders can replay task intent and restart work.
+  { id: 'repeat-tool-reminder', disabled: true },
   { insert: [
     { id: 'web-local', name: moduleURL('local-web/web-provider.mjs') },
-    { id: 'todo-completion', name: moduleURL('local-agent/todo-completion.mjs') },
+    { id: 'initial-context-order', name: moduleURL('local-agent/initial-context-order.mjs'),
+      disabled: cfg.InitialContextOrder !== true },
     { id: 'tool-grounded-execution', name: moduleURL('local-agent/tool-grounded-execution.mjs'),
       disabled: cfg.ToolGroundedExecution === false },
     { id: 'tool-call-recovery', name: moduleURL('local-agent/tool-call-recovery.mjs') },
-    { id: 'state-card', name: moduleURL('local-agent/state-card.mjs'),
-      disabled: cfg.StateCard === false },
     { id: 'edit-guard', name: moduleURL('local-agent/edit-guard.mjs'),
       disabled: cfg.EditGuard === false },
-    { id: 'task-ledger', name: moduleURL('local-agent/task-ledger.mjs'),
-      disabled: cfg.TaskLedger === false },
     { id: 'mcp-browser', name: '@deepseek-ai/dsh-mcp-client', config: {
       serverName: 'browser', transport: 'stdio', command: process.execPath,
       args: [path.join(dsh, 'local-web/browser-server.mjs')], cwd: path.join(dsh, 'local-web'),
@@ -148,13 +148,14 @@ const entries = [
 // Preserve unrelated user patch entries; replace only entries owned by this installer.
 const patchFile = path.join(profile, 'cordis.patch.yml');
 const previous = document(patchFile, []);
-const owned = new Set(['web', 'web-search-deepseek', 'web-fetch-http', 'ui-trajectory', 'ui-model-selection', 'web-local', 'todo-completion', 'tool-grounded-execution', 'tool-call-recovery', 'state-card', 'edit-guard', 'task-ledger', 'mcp-browser']);
+// Retired ids stay owned so an upgrade removes their old loader entries.
+const owned = new Set(['web', 'web-search-deepseek', 'web-fetch-http', 'repeat-tool-reminder', 'ui-trajectory', 'ui-model-selection', 'web-local', 'initial-context-order', 'todo-completion', 'tool-grounded-execution', 'tool-call-recovery', 'state-card', 'edit-guard', 'task-ledger', 'mcp-browser']);
 const keep = previous.flatMap(entry => {
   if (owned.has(entry.id)) return [];
   if (entry.insert) { const insert = entry.insert.filter(row => !owned.has(row.id)); return insert.length ? [{ ...entry, insert }] : []; }
   return [entry];
 });
-write(patchFile, yaml.dump([...keep, ...entries], { lineWidth: 120, noRefs: true }));
+write(patchFile, yaml.dump(removeInjectedReminders([...keep, ...entries], moduleURL('local-agent/tool-grounded-execution.mjs')), { lineWidth: 120, noRefs: true }));
 for (const name of ['agent.cordis.yml', 'preset.yml']) {
   const dest = path.join(home, '.agent-presets/ninfer-local', name);
   if (!fs.existsSync(dest)) write(dest, fs.readFileSync(path.join(root, 'templates/dsh-preset', name), 'utf8'));

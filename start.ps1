@@ -10,11 +10,6 @@ if ($cfg.PSObject.Properties['OverlapPredecessor']) {
     if ($cfg.OverlapPredecessor -isnot [bool]) { throw 'OverlapPredecessor must be a JSON boolean.' }
     $overlapPredecessor = $cfg.OverlapPredecessor
 }
-$stateCard = $true
-if ($cfg.PSObject.Properties['StateCard']) {
-    if ($cfg.StateCard -isnot [bool]) { throw 'StateCard must be a JSON boolean.' }
-    $stateCard = $cfg.StateCard
-}
 $penaltyScope = 'answer'
 if ($cfg.PSObject.Properties['AnswerPenaltyScope']) { $penaltyScope = [string]$cfg.AnswerPenaltyScope }
 if ($penaltyScope -notin @('answer', 'carry-over')) { throw 'AnswerPenaltyScope must be answer or carry-over. See docs/ANSWER_PENALTY_SCOPE.md.' }
@@ -58,7 +53,6 @@ try {
     # v1.1.0: complete-query-gated predecessor fill. Set OverlapPredecessor=false
     # (or NINFER_KVMEM_OVERLAP_PREDECESSOR=0) to restore v1.0.0 selection.
     $env:NINFER_KVMEM_OVERLAP_PREDECESSOR = if ($overlapPredecessor) { '1' } else { '0' }
-    $env:LOCAL_STATE_CARD = if ($stateCard) { '1' } else { '0' }
     # Qualified semantic-history repairs. Explicit 0 remains available for diagnosis.
     if (-not $env:NINFER_KVMEM_INDEX_DECODE) { $env:NINFER_KVMEM_INDEX_DECODE='1' }
     if (-not $env:NINFER_KVMEM_CACHE_QUERY) { $env:NINFER_KVMEM_CACHE_QUERY='1' }

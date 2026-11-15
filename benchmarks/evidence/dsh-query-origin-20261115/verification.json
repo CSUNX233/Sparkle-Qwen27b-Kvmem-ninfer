@@ -1,0 +1,131 @@
+{
+  "date": "2026-11-15",
+  "recommendation": "Keep v1.2.0 engine and reminder removal as daily; initial context ordering stays experimental and defaults off",
+  "daily_verified": {
+    "engineUnchanged": true,
+    "protectedSettingsUnchanged": true,
+    "retiredActive": [],
+    "nativeRepeatDisabled": true,
+    "queryCandidateEnabled": false,
+    "guidanceHasUserInjection": false,
+    "engineSha256": "f9a6b29cb7755b18ae02dcc130c17b5e28b2c97530c647db9936680bd5c2ad46"
+  },
+  "unchanged_budgets": {
+    "device_kv_tokens": 39168,
+    "retrieve_tokens": 6144,
+    "sink_tokens": 12288,
+    "recent_tokens": 19456,
+    "host_kv_mib": 7168,
+    "max_context": 262144,
+    "max_output": 73728,
+    "reasoning_effort": "xhigh",
+    "kv_dtype": "rk4v4",
+    "gdn_state": "FP32",
+    "vision": "CPU"
+  },
+  "first_requests": {
+    "sameMessageMultiset": true,
+    "sameOtherRequestFields": true,
+    "repairedLastUserStartsWithActualTask": true,
+    "messageCounts": [
+      5,
+      5
+    ],
+    "tools": [
+      33,
+      33
+    ]
+  },
+  "query_spans": {
+    "previous_last_user": [
+      10402,
+      10616
+    ],
+    "experimental_real_task": [
+      10315,
+      10616
+    ]
+  },
+  "tests": {
+    "deterministic_suite": {
+      "passed": 49,
+      "failed": 0
+    },
+    "after_default_off_change": {
+      "migration_and_generator_passed": 6,
+      "failed": 0
+    },
+    "fixture_failure_resolved": "Initial mocked shell call omitted required description; fixture corrected and actual READY output now asserted"
+  },
+  "variants": [
+    {
+      "variant": "previous DSH stack",
+      "engine_sha256": "f9a6b29cb7755b18ae02dcc130c17b5e28b2c97530c647db9936680bd5c2ad46",
+      "seed": 42,
+      "initial_prompt_tokens": 10621,
+      "first_main_output_tokens": 57457,
+      "first_main_total": "16m 15.6s",
+      "observed_duration_seconds": 3600.64,
+      "stop_reason": "predeclared one-hour harness budget",
+      "gpu_total_peak_mib": 11250,
+      "persisted_tool_calls": 37,
+      "plugin_notices": {
+        "@deepseek-ai/dsh-system-prompt": 2,
+        "local-state-card": 3,
+        "local-todo-completion:policy": 1,
+        "compact": 1,
+        "local-tool-grounded-execution:browser-checkpoint": 1
+      },
+      "compaction": {
+        "start": 1,
+        "summary": 1,
+        "end": 1,
+        "errors": 0
+      },
+      "completed_turns": 0,
+      "first_tool_continuation": {
+        "prompt_tokens": 68627,
+        "cache_tokens": 10616,
+        "note": "Both only reused the initial prompt checkpoint; query-origin repair did not remove this recomputation"
+      }
+    },
+    {
+      "variant": "reminder removal + experimental initial context ordering",
+      "engine_sha256": "f9a6b29cb7755b18ae02dcc130c17b5e28b2c97530c647db9936680bd5c2ad46",
+      "seed": 42,
+      "initial_prompt_tokens": 10621,
+      "first_main_output_tokens": 72173,
+      "first_main_total": "19m 6.6s",
+      "observed_duration_seconds": 2152.33,
+      "stop_reason": "user-requested conclusion, not a product failure",
+      "gpu_total_peak_mib": 11248,
+      "persisted_tool_calls": 35,
+      "plugin_notices": {
+        "@deepseek-ai/dsh-system-prompt": 1
+      },
+      "compaction": {
+        "start": 0,
+        "summary": 0,
+        "end": 0,
+        "errors": 0
+      },
+      "completed_turns": 0,
+      "first_tool_continuation": {
+        "prompt_tokens": 82825,
+        "cache_tokens": 10616,
+        "note": "Both only reused the initial prompt checkpoint; query-origin repair did not remove this recomputation"
+      }
+    }
+  ],
+  "limits": [
+    "One seed per variant; different observation lengths, candidate stopped by user",
+    "Neither full multi-turn game task completed; no independent full browser functional acceptance",
+    "Eight-edit and three-action model fixtures were prepared but not run after user requested conclusion",
+    "No real quality or throughput claim for the reminder-only configuration",
+    "Earlier native-headless exploration did not mount the daily preset and was excluded",
+    "GPU peaks are whole-device one-second samples, not proof of a two-MiB saving",
+    "Unclosed tool-shell mixed output was not fixed or qualified in this change"
+  ],
+  "privacy": "Only aggregate facts published; raw requests, sessions, compaction dumps, login URLs and generated projects remain private",
+  "model_description": "Huihui Qwen3.8-27B Swift 1.5 GSQ-RCO IQ3_XXS + MTP, BF16 vision tower on CPU"
+}
