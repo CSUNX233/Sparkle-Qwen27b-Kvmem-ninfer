@@ -11,7 +11,7 @@ param(
     [int]$DeviceKV = 78336,
     [int]$HostKVMiB = 7168,
     [int]$CudaGraphAllowanceMiB = 64,
-    [switch]$NoGraph,
+    [switch]$Graph,
     [switch]$GdnFp16,
     [switch]$DryRun
 )
@@ -136,10 +136,12 @@ $engineArgs = @(
     '--api-key', $apiKey
 )
 if ($GdnFp16) { $engineArgs += '--gdn-state-fp16' }
-if ($NoGraph) {
-    $engineArgs += '--no-cuda-graph'
-} else {
+if ($Graph) {
     $engineArgs += @('--cuda-graph-allowance-mib', [string]$CudaGraphAllowanceMiB)
+} else {
+    # Eager is the validated dual-lane batch2 path. Enable -Graph only after smoke-testing
+    # MTP+Graph on this machine.
+    $engineArgs += '--no-cuda-graph'
 }
 
 if ($DryRun) {
