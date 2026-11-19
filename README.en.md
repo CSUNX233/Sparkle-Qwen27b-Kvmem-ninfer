@@ -1,5 +1,7 @@
 <div align="center">
 
+[中文](README.md) | English
+
 # Sparkle-Qwen27b-Kvmem-ninfer
 
 **A local 27B Agent on a 12GB laptop GPU**
