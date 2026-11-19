@@ -1,5 +1,7 @@
 <div align="center">
 
+[English](README.en.md) | 中文
+
 # Sparkle-Qwen27b-Kvmem-ninfer
 
 **在 12GB 笔记本显卡上运行 27B 本地 Agent**
